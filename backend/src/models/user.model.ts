@@ -34,15 +34,19 @@ export class UserModel {
     username: string;
     password_hash: string;
     role: string;
-  }): Promise<User | null> {
+  }): Promise<User> {
     const { data, error } = await supabase
       .from('users')
       .insert([userData])
       .select()
       .single();
 
-    if (error || !data) {
-      return null;
+    if (error) {
+      throw new Error(`Failed to create user: ${error.message} (${error.code})`);
+    }
+
+    if (!data) {
+      throw new Error('Failed to create user: No data returned');
     }
 
     return data as User;

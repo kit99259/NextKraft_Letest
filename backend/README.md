@@ -87,30 +87,97 @@ This will start the server with hot-reload using `tsx watch`. The server will be
 
 ### Authentication
 
-- **POST** `/api/auth/login`
-  - Request body:
-    ```json
-    {
-      "username": "string",
-      "password": "string"
-    }
-    ```
-  - Response:
-    ```json
-    {
-      "success": true,
-      "data": {
-        "token": "jwt_token_here",
+#### POST `/api/auth/signup`
+Create a new user account.
+
+- Request body:
+  ```json
+  {
+    "username": "string (min 3 characters)",
+    "password": "string (min 6 characters)",
+    "role": "ADMIN|OPERATOR|CUSTOMER",
+    "full_name": "string (optional)",
+    "email": "string (optional, must be valid email)",
+    "phone": "string (optional)"
+  }
+  ```
+
+- Response (201 Created):
+  ```json
+  {
+    "success": true,
+    "message": "Signup successful",
+    "data": {
+      "token": "jwt_token_here",
+      "role": "ADMIN|OPERATOR|CUSTOMER",
+      "user": {
+        "id": "user_id",
+        "username": "username",
         "role": "ADMIN|OPERATOR|CUSTOMER",
-        "user": {
-          "id": "user_id",
-          "username": "username",
-          "role": "ADMIN|OPERATOR|CUSTOMER",
-          "profile": { ... }
+        "profile": {
+          "id": "profile_id",
+          "user_id": "user_id",
+          "full_name": "string",
+          "email": "string",
+          "phone": "string (for customers only)"
         }
       }
     }
-    ```
+  }
+  ```
+
+- Example:
+  ```bash
+  curl -X POST http://localhost:3000/api/auth/signup \
+    -H "Content-Type: application/json" \
+    -d '{
+      "username": "john_doe",
+      "password": "securepass123",
+      "role": "CUSTOMER",
+      "full_name": "John Doe",
+      "email": "john@example.com",
+      "phone": "+1234567890"
+    }'
+  ```
+
+#### POST `/api/auth/login`
+Login with existing credentials.
+
+- Request body:
+  ```json
+  {
+    "username": "string",
+    "password": "string"
+  }
+  ```
+
+- Response:
+  ```json
+  {
+    "success": true,
+    "message": "Login successful",
+    "data": {
+      "token": "jwt_token_here",
+      "role": "ADMIN|OPERATOR|CUSTOMER",
+      "user": {
+        "id": "user_id",
+        "username": "username",
+        "role": "ADMIN|OPERATOR|CUSTOMER",
+        "profile": { ... }
+      }
+    }
+  }
+  ```
+
+- Example:
+  ```bash
+  curl -X POST http://localhost:3000/api/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{
+      "username": "john_doe",
+      "password": "securepass123"
+    }'
+  ```
 
 ### Protected Routes (Require JWT Token)
 

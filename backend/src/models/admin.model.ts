@@ -29,5 +29,32 @@ export class AdminModel {
 
     return data as Admin;
   }
+
+  static async create(adminData: {
+    user_id: string;
+    name?: string;
+  }): Promise<Admin> {
+    // Generate ID if not provided
+    const adminWithId = {
+      id: adminData.user_id, // Use user_id as admin id, or generate UUID
+      ...adminData,
+    };
+    
+    const { data, error } = await supabase
+      .from('admins')
+      .insert([adminWithId])
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create admin: ${error.message} (${error.code})`);
+    }
+
+    if (!data) {
+      throw new Error('Failed to create admin: No data returned');
+    }
+
+    return data as Admin;
+  }
 }
 

@@ -5,36 +5,47 @@ export interface User {
   username: string;
   password_hash: string;
   role: UserRole;
+  role_ref_id?: string;
   created_at: string;
-  updated_at: string;
+  last_login?: string;
 }
 
 export interface Admin {
   id: string;
   user_id: string;
-  full_name?: string;
-  email?: string;
+  name?: string;
   created_at: string;
-  updated_at: string;
 }
 
 export interface Operator {
   id: string;
   user_id: string;
-  full_name?: string;
+  name?: string;
   email?: string;
+  phone?: string;
+  project_ids?: any;
+  has_pallet_power?: boolean;
+  is_active?: boolean;
   created_at: string;
-  updated_at: string;
 }
 
 export interface Customer {
   id: string;
   user_id: string;
-  full_name?: string;
-  email?: string;
+  project_id?: string;
+  name?: string;
+  surname?: string;
   phone?: string;
-  created_at: string;
-  updated_at: string;
+  email?: string;
+  society_name?: string;
+  wing_name?: string;
+  flat_number?: string;
+  profession?: string;
+  comments?: string;
+  status?: string;
+  submitted_at?: string;
+  approved_at?: string;
+  approved_by?: string;
 }
 
 export interface Project {

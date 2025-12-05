@@ -29,5 +29,37 @@ export class OperatorModel {
 
     return data as Operator;
   }
+
+  static async create(operatorData: {
+    user_id: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    project_ids?: any;
+    has_pallet_power?: boolean;
+    is_active?: boolean;
+  }): Promise<Operator> {
+    // Generate ID if not provided
+    const operatorWithId = {
+      id: operatorData.user_id, // Use user_id as operator id, or generate UUID
+      ...operatorData,
+    };
+    
+    const { data, error } = await supabase
+      .from('operators')
+      .insert([operatorWithId])
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create operator: ${error.message} (${error.code})`);
+    }
+
+    if (!data) {
+      throw new Error('Failed to create operator: No data returned');
+    }
+
+    return data as Operator;
+  }
 }
 
