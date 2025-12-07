@@ -16,6 +16,10 @@ const options = {
       {
         url: `http://localhost:${config.port}`,
         description: 'Development server'
+      },
+      {
+        url: 'https://nextkraft-letest.onrender.com',
+        description: 'Production server'
       }
     ],
     components: {
