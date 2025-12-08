@@ -63,33 +63,6 @@ const login = async (username, password) => {
   };
 };
 
-// Sign Up Operator Service (Admin only)
-const signUpOperator = async (username, password) => {
-  // Check if user already exists
-  const existingUser = await User.findOne({ where: { Username: username } });
-  
-  if (existingUser) {
-    throw new Error('Username already exists');
-  }
-
-  // Create new user with operator role
-  const user = await User.create({
-    Username: username,
-    Password: password,
-    Role: 'operator'
-  });
-
-  return {
-    user: {
-      id: user.Id,
-      username: user.Username,
-      role: user.Role,
-      createdAt: user.CreatedAt,
-      updatedAt: user.UpdatedAt
-    }
-  };
-};
-
 // Get User Profile Service
 const getProfile = async (userId) => {
   const user = await User.findByPk(userId, {
@@ -111,7 +84,6 @@ const getProfile = async (userId) => {
 
 module.exports = {
   signUp,
-  signUpOperator,
   login,
   getProfile
 };

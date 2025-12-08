@@ -39,26 +39,6 @@ const validateSignUp = [
   handleValidationErrors
 ];
 
-// Sign up operator validation rules (Admin only)
-const validateSignUpOperator = [
-  body('username')
-    .trim()
-    .notEmpty()
-    .withMessage('Username is required')
-    .isLength({ min: 3, max: 100 })
-    .withMessage('Username must be between 3 and 100 characters')
-    .matches(/^[a-zA-Z0-9_]+$/)
-    .withMessage('Username can only contain letters, numbers, and underscores'),
-  
-  body('password')
-    .notEmpty()
-    .withMessage('Password is required')
-    .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long'),
-  
-  handleValidationErrors
-];
-
 // Login validation rules
 const validateLogin = [
   body('username')
@@ -75,7 +55,6 @@ const validateLogin = [
 
 module.exports = {
   validateSignUp,
-  validateSignUpOperator,
   validateLogin
 };
 

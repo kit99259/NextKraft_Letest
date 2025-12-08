@@ -1,10 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth.middleware');
-const authController = require('../controllers/auth.controller');
 const operatorController = require('../controllers/operator.controller');
 const parkingSystemController = require('../controllers/parkingSystem.controller');
-const { validateSignUpOperator } = require('../validators/auth.validator');
 const { validateCreateOperator } = require('../validators/operator.validator');
 const { validateCreateParkingSystem } = require('../validators/parkingSystem.validator');
 
@@ -31,73 +29,6 @@ router.get('/', (req, res) => {
     user: req.user
   });
 });
-
-/**
- * @swagger
- * /api/admin/signup-operator:
- *   post:
- *     summary: Register a new operator (Admin only)
- *     tags: [Admin]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - username
- *               - password
- *             properties:
- *               username:
- *                 type: string
- *                 minLength: 3
- *                 maxLength: 100
- *                 example: "operator_01"
- *               password:
- *                 type: string
- *                 minLength: 6
- *                 example: "password123"
- *     responses:
- *       201:
- *         description: Operator registered successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     user:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: integer
- *                         username:
- *                           type: string
- *                         role:
- *                           type: string
- *                           example: "operator"
- *                         createdAt:
- *                           type: string
- *                           format: date-time
- *                         updatedAt:
- *                           type: string
- *                           format: date-time
- *       400:
- *         description: Validation error or username already exists
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - Admin access required
- */
-router.post('/signup-operator', validateSignUpOperator, authController.signUpOperator);
 
 /**
  * @swagger
