@@ -2,7 +2,7 @@ const { User } = require('../models/associations');
 const { generateToken } = require('../utils');
 
 // Sign Up Service
-const signUp = async (username, password, role) => {
+const signUp = async (username, password) => {
   // Check if user already exists
   const existingUser = await User.findOne({ where: { Username: username } });
   
@@ -10,17 +10,11 @@ const signUp = async (username, password, role) => {
     throw new Error('Username already exists');
   }
 
-  // Validate role
-  const validRoles = ['admin', 'operator', 'customer'];
-  if (!validRoles.includes(role)) {
-    throw new Error('Invalid role. Must be admin, operator, or customer');
-  }
-
   // Create new user
   const user = await User.create({
     Username: username,
     Password: password,
-    Role: role
+    Role: 'customer'
   });
 
   // Generate token
@@ -69,6 +63,33 @@ const login = async (username, password) => {
   };
 };
 
+// Sign Up Operator Service (Admin only)
+const signUpOperator = async (username, password) => {
+  // Check if user already exists
+  const existingUser = await User.findOne({ where: { Username: username } });
+  
+  if (existingUser) {
+    throw new Error('Username already exists');
+  }
+
+  // Create new user with operator role
+  const user = await User.create({
+    Username: username,
+    Password: password,
+    Role: 'operator'
+  });
+
+  return {
+    user: {
+      id: user.Id,
+      username: user.Username,
+      role: user.Role,
+      createdAt: user.CreatedAt,
+      updatedAt: user.UpdatedAt
+    }
+  };
+};
+
 // Get User Profile Service
 const getProfile = async (userId) => {
   const user = await User.findByPk(userId, {
@@ -90,6 +111,7 @@ const getProfile = async (userId) => {
 
 module.exports = {
   signUp,
+  signUpOperator,
   login,
   getProfile
 };

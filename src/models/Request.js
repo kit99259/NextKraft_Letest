@@ -19,7 +19,7 @@ const Request = sequelize.define('Request', {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: 'pallet_allotment',
+      model: 'PalletDetails',
       key: 'Id'
     }
   },

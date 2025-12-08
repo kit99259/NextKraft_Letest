@@ -19,7 +19,7 @@ const RequestQueue = sequelize.define('RequestQueue', {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: 'pallet_allotment',
+      model: 'PalletDetails',
       key: 'Id'
     }
   },

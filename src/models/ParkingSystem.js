@@ -35,10 +35,6 @@ const ParkingSystem = sequelize.define('ParkingSystem', {
     type: DataTypes.INTEGER,
     allowNull: false
   },
-  PalletDetails: {
-    type: DataTypes.JSON,
-    allowNull: true
-  },
   TimeForEachLevel: {
     type: DataTypes.INTEGER,
     defaultValue: 0

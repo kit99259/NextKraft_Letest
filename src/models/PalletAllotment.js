@@ -10,8 +10,13 @@ const PalletAllotment = sequelize.define('PalletAllotment', {
   UserId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    defaultValue: 0
+  },
+  ParkingSystemId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
     references: {
-      model: 'users',
+      model: 'parking_system',
       key: 'Id'
     }
   },
@@ -23,25 +28,25 @@ const PalletAllotment = sequelize.define('PalletAllotment', {
       key: 'Id'
     }
   },
-  ParkingSystemId: {
+  Level: {
     type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'parking_system',
-      key: 'Id'
-    }
+    allowNull: false
+  },
+  Column: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  UserGivenPalletNumber: {
+    type: DataTypes.STRING(50),
+    allowNull: true
   },
   CarId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     references: {
       model: 'cars',
       key: 'Id'
     }
-  },
-  PalletDetails: {
-    type: DataTypes.JSON,
-    allowNull: true
   },
   Status: {
     type: DataTypes.ENUM('Assigned', 'Released'),
@@ -58,7 +63,7 @@ const PalletAllotment = sequelize.define('PalletAllotment', {
     defaultValue: DataTypes.NOW
   }
 }, {
-  tableName: 'pallet_allotment',
+  tableName: 'PalletDetails',
   timestamps: true,
   createdAt: 'CreatedAt',
   updatedAt: 'UpdatedAt'

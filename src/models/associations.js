@@ -11,7 +11,7 @@ const Request = require('./Request');
 // User associations
 User.hasMany(Customer, { foreignKey: 'UserId', as: 'customers' });
 User.hasMany(Car, { foreignKey: 'UserId', as: 'cars' });
-User.hasMany(PalletAllotment, { foreignKey: 'UserId', as: 'palletAllotments' });
+User.hasMany(Operator, { foreignKey: 'UserId', as: 'operators' });
 User.hasMany(RequestQueue, { foreignKey: 'UserId', as: 'requestQueues' });
 User.hasMany(Request, { foreignKey: 'UserId', as: 'requests' });
 User.hasMany(Customer, { foreignKey: 'ApprovedBy', as: 'approvedCustomers' });
@@ -26,9 +26,11 @@ Project.hasMany(PalletAllotment, { foreignKey: 'ProjectId', as: 'palletAllotment
 // Customer associations
 Customer.belongsTo(User, { foreignKey: 'UserId', as: 'user' });
 Customer.belongsTo(Project, { foreignKey: 'ProjectId', as: 'project' });
+Customer.belongsTo(ParkingSystem, { foreignKey: 'ParkingSystemId', as: 'parkingSystem' });
 Customer.belongsTo(User, { foreignKey: 'ApprovedBy', as: 'approver' });
 
 // Operator associations
+Operator.belongsTo(User, { foreignKey: 'UserId', as: 'user' });
 Operator.belongsTo(Project, { foreignKey: 'ProjectId', as: 'project' });
 Operator.belongsTo(ParkingSystem, { foreignKey: 'ParkingSystemId', as: 'parkingSystem' });
 Operator.belongsTo(User, { foreignKey: 'ApprovedBy', as: 'approver' });
@@ -38,6 +40,7 @@ Operator.hasMany(Request, { foreignKey: 'OperatorId', as: 'requests' });
 // ParkingSystem associations
 ParkingSystem.belongsTo(Project, { foreignKey: 'ProjectId', as: 'project' });
 ParkingSystem.hasMany(Operator, { foreignKey: 'ParkingSystemId', as: 'operators' });
+ParkingSystem.hasMany(Customer, { foreignKey: 'ParkingSystemId', as: 'customers' });
 ParkingSystem.hasMany(PalletAllotment, { foreignKey: 'ParkingSystemId', as: 'palletAllotments' });
 
 // Car associations
@@ -45,7 +48,6 @@ Car.belongsTo(User, { foreignKey: 'UserId', as: 'user' });
 Car.hasMany(PalletAllotment, { foreignKey: 'CarId', as: 'palletAllotments' });
 
 // PalletAllotment associations
-PalletAllotment.belongsTo(User, { foreignKey: 'UserId', as: 'user' });
 PalletAllotment.belongsTo(Project, { foreignKey: 'ProjectId', as: 'project' });
 PalletAllotment.belongsTo(ParkingSystem, { foreignKey: 'ParkingSystemId', as: 'parkingSystem' });
 PalletAllotment.belongsTo(Car, { foreignKey: 'CarId', as: 'car' });

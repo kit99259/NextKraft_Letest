@@ -4,9 +4,10 @@ const { successResponse, errorResponse } = require('../utils');
 // Sign Up Controller
 const signUp = async (req, res) => {
   try {
-    const { username, password, role } = req.body;
+    const { username, password } = req.body;
     
-    const result = await authService.signUp(username, password, role);
+    // Force role to customer for all sign-ups
+    const result = await authService.signUp(username, password);
     
     return successResponse(res, result, 'User registered successfully', 201);
   } catch (error) {
@@ -32,6 +33,21 @@ const login = async (req, res) => {
   }
 };
 
+// Sign Up Operator Controller (Admin only)
+const signUpOperator = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    const result = await authService.signUpOperator(username, password);
+    
+    return successResponse(res, result, 'Operator registered successfully', 201);
+  } catch (error) {
+    console.error('Sign up operator error:', error);
+    const statusCode = error.message === 'Username already exists' ? 400 : 500;
+    return errorResponse(res, error.message || 'Failed to register operator', statusCode);
+  }
+};
+
 // Get Profile Controller
 const getProfile = async (req, res) => {
   try {
@@ -49,6 +65,7 @@ const getProfile = async (req, res) => {
 
 module.exports = {
   signUp,
+  signUpOperator,
   login,
   getProfile
 };

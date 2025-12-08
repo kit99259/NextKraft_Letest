@@ -40,8 +40,7 @@ CREATE TABLE customers (
     MobileNumber VARCHAR(20),
     UserId INT NOT NULL,
     ProjectId INT NOT NULL,
-    SocietyName VARCHAR(150),
-    WingName VARCHAR(100),
+    ParkingSystemId INT NULL,
     FlatNumber VARCHAR(50),
     Profession VARCHAR(100),
     Status ENUM('Approved', 'Rejected', 'Pending') DEFAULT 'Pending',
@@ -52,6 +51,7 @@ CREATE TABLE customers (
     
     FOREIGN KEY (UserId) REFERENCES users(Id),
     FOREIGN KEY (ProjectId) REFERENCES projects(Id),
+    FOREIGN KEY (ParkingSystemId) REFERENCES parking_system(Id),
     FOREIGN KEY (ApprovedBy) REFERENCES users(Id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -65,6 +65,7 @@ CREATE TABLE operators (
     LastName VARCHAR(100),
     MobileNumber VARCHAR(20),
     Email VARCHAR(150),
+    UserId INT NOT NULL,
     Status ENUM('Approved', 'Rejected', 'Pending') DEFAULT 'Pending',
     ProjectId INT NOT NULL,
     ParkingSystemId INT NULL,
@@ -74,6 +75,7 @@ CREATE TABLE operators (
     CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
+    FOREIGN KEY (UserId) REFERENCES users(Id),
     FOREIGN KEY (ProjectId) REFERENCES projects(Id),
     FOREIGN KEY (ParkingSystemId) REFERENCES parking_system(Id),
     FOREIGN KEY (ApprovedBy) REFERENCES users(Id)
@@ -91,8 +93,6 @@ CREATE TABLE parking_system (
     Level INT NOT NULL,
     `Column` INT NOT NULL,
     TotalNumberOfPallet INT NOT NULL,
-    
-    PalletDetails JSON,
     
     TimeForEachLevel INT DEFAULT 0,  -- seconds
     TimeForHorizontalMove INT DEFAULT 0, -- seconds
@@ -122,25 +122,23 @@ CREATE TABLE cars (
 
 
 ------------------------------------------------------------
--- PALLET ALLOTMENT TABLE
+-- PALLET DETAILS TABLE
 ------------------------------------------------------------
-CREATE TABLE pallet_allotment (
+CREATE TABLE PalletDetails (
     Id INT AUTO_INCREMENT PRIMARY KEY,
-    UserId INT NOT NULL,
-    ProjectId INT NOT NULL,
+    UserId INT NOT NULL DEFAULT 0,
     ParkingSystemId INT NOT NULL,
-    CarId INT NOT NULL,
-    
-    PalletDetails JSON,
-    
-    Status ENUM('Assigned', 'Released') DEFAULT 'Assigned',
-    
+    ProjectId INT NOT NULL,
+    Level INT NOT NULL,
+    `Column` INT NOT NULL,
+    UserGivenPalletNumber VARCHAR(50),
+    CarId INT NULL,
+    Status ENUM('Assigned', 'Released') DEFAULT 'Released',
     CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (UserId) REFERENCES users(Id),
-    FOREIGN KEY (ProjectId) REFERENCES projects(Id),
     FOREIGN KEY (ParkingSystemId) REFERENCES parking_system(Id),
+    FOREIGN KEY (ProjectId) REFERENCES projects(Id),
     FOREIGN KEY (CarId) REFERENCES cars(Id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -161,7 +159,7 @@ CREATE TABLE request_queue (
     UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
     FOREIGN KEY (UserId) REFERENCES users(Id),
-    FOREIGN KEY (PalletAllotmentId) REFERENCES pallet_allotment(Id),
+    FOREIGN KEY (PalletAllotmentId) REFERENCES PalletDetails(Id),
     FOREIGN KEY (OperatorId) REFERENCES operators(Id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -182,6 +180,6 @@ CREATE TABLE requests (
     UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
     FOREIGN KEY (UserId) REFERENCES users(Id),
-    FOREIGN KEY (PalletAllotmentId) REFERENCES pallet_allotment(Id),
+    FOREIGN KEY (PalletAllotmentId) REFERENCES PalletDetails(Id),
     FOREIGN KEY (OperatorId) REFERENCES operators(Id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

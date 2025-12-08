@@ -39,13 +39,13 @@ const Customer = sequelize.define('Customer', {
       key: 'Id'
     }
   },
-  SocietyName: {
-    type: DataTypes.STRING(150),
-    allowNull: true
-  },
-  WingName: {
-    type: DataTypes.STRING(100),
-    allowNull: true
+  ParkingSystemId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'parking_system',
+      key: 'Id'
+    }
   },
   FlatNumber: {
     type: DataTypes.STRING(50),

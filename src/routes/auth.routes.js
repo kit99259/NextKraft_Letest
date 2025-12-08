@@ -19,7 +19,6 @@ const { authenticate } = require('../middleware/auth.middleware');
  *             required:
  *               - username
  *               - password
- *               - role
  *             properties:
  *               username:
  *                 type: string
@@ -32,8 +31,9 @@ const { authenticate } = require('../middleware/auth.middleware');
  *                 example: "password123"
  *               role:
  *                 type: string
- *                 enum: [admin, operator, customer]
- *                 example: "customer"
+ *                 enum: [customer]
+ *                 default: "customer"
+ *                 description: "Ignored if provided; users are always registered as customer"
  *     responses:
  *       201:
  *         description: User registered successfully
@@ -62,7 +62,7 @@ router.post('/signup', validateSignUp, authController.signUp);
  * @swagger
  * /api/auth/login:
  *   post:
- *     summary: Login user
+ *     summary: Login user (Available for all roles: admin, operator, customer)
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -97,6 +97,20 @@ router.post('/signup', validateSignUp, authController.signUp);
  *                   properties:
  *                     user:
  *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         username:
+ *                           type: string
+ *                         role:
+ *                           type: string
+ *                           enum: [admin, operator, customer]
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
  *                     token:
  *                       type: string
  *       401:

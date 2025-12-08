@@ -23,6 +23,14 @@ const Operator = sequelize.define('Operator', {
     type: DataTypes.STRING(150),
     allowNull: true
   },
+  UserId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'Id'
+    }
+  },
   Status: {
     type: DataTypes.ENUM('Approved', 'Rejected', 'Pending'),
     defaultValue: 'Pending'
