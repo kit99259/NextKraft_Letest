@@ -18,11 +18,16 @@ const signUp = async (req, res) => {
   }
 };
 
-// Login Controller
+/**
+ * Universal Login Controller
+ * Handles login for all user types (admin, operator, customer)
+ * Returns JWT token with userId and role in payload
+ */
 const login = async (req, res) => {
   try {
     const { username, password } = req.body;
     
+    // Login service works for all user roles
     const result = await authService.login(username, password);
     
     return successResponse(res, result, 'Login successful');
@@ -33,23 +38,7 @@ const login = async (req, res) => {
   }
 };
 
-// Get Profile Controller
-const getProfile = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    
-    const userData = await authService.getProfile(userId);
-    
-    return successResponse(res, userData, 'Profile retrieved successfully');
-  } catch (error) {
-    console.error('Get profile error:', error);
-    const statusCode = error.message === 'User not found' ? 404 : 500;
-    return errorResponse(res, error.message || 'Failed to retrieve profile', statusCode);
-  }
-};
-
 module.exports = {
   signUp,
-  login,
-  getProfile
+  login
 };

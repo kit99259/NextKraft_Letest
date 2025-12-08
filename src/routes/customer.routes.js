@@ -10,26 +10,6 @@ router.use(authenticate);
 /**
  * @swagger
  * /api/customer:
- *   get:
- *     summary: Get customer dashboard (placeholder)
- *     tags: [Customer]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Customer dashboard data
- */
-router.get('/', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Customer routes - Coming soon',
-    user: req.user
-  });
-});
-
-/**
- * @swagger
- * /api/customer:
  *   post:
  *     summary: Create a new customer profile
  *     tags: [Customer]

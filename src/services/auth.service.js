@@ -32,9 +32,13 @@ const signUp = async (username, password) => {
   };
 };
 
-// Login Service
+/**
+ * Universal Login Service
+ * Works for all user types: admin, operator, and customer
+ * Returns JWT token containing userId and role in payload
+ */
 const login = async (username, password) => {
-  // Find user by username
+  // Find user by username (works for any role: admin, operator, customer)
   const user = await User.findOne({ where: { Username: username } });
   
   if (!user) {
@@ -48,7 +52,7 @@ const login = async (username, password) => {
     throw new Error('Invalid username or password');
   }
 
-  // Generate token
+  // Generate JWT token with userId and role in payload
   const token = generateToken(user.Id, user.Role);
 
   return {
@@ -59,32 +63,13 @@ const login = async (username, password) => {
       createdAt: user.CreatedAt,
       updatedAt: user.UpdatedAt
     },
-    token
-  };
-};
-
-// Get User Profile Service
-const getProfile = async (userId) => {
-  const user = await User.findByPk(userId, {
-    attributes: { exclude: ['Password'] }
-  });
-
-  if (!user) {
-    throw new Error('User not found');
-  }
-
-  return {
-    id: user.Id,
-    username: user.Username,
-    role: user.Role,
-    createdAt: user.CreatedAt,
-    updatedAt: user.UpdatedAt
+    token // JWT token contains { userId: user.Id, role: user.Role }
   };
 };
 
 module.exports = {
   signUp,
-  login,
-  getProfile
+  login
 };
+
 

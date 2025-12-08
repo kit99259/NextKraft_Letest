@@ -12,26 +12,6 @@ router.use(authorize('admin'));
 
 /**
  * @swagger
- * /api/admin:
- *   get:
- *     summary: Get admin dashboard (placeholder)
- *     tags: [Admin]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Admin dashboard data
- */
-router.get('/', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Admin routes - Coming soon',
-    user: req.user
-  });
-});
-
-/**
- * @swagger
  * /api/admin/create-operator:
  *   post:
  *     summary: Create a new operator with full profile (Admin only)
