@@ -16,12 +16,7 @@ const getISTTime = () => {
 // Create Parking System Service
 const createParkingSystem = async (parkingSystemData) => {
   // Step 1: Create or get project
-  let project = await Project.findOne({ 
-    where: { ProjectName: parkingSystemData.ProjectName } 
-  });
   
-  if (!project) {
-    // Create new project
     const istTime = getISTTime();
     project = await Project.create({
       ProjectName: parkingSystemData.ProjectName,
@@ -29,7 +24,6 @@ const createParkingSystem = async (parkingSystemData) => {
       CreatedAt: istTime,
       UpdatedAt: istTime
     });
-  }
   
   const projectId = project.Id;
   
@@ -39,8 +33,6 @@ const createParkingSystem = async (parkingSystemData) => {
     totalNumberOfPallet = parkingSystemData.Level * parkingSystemData.Column;
   }
   
-  // Step 3: Get IST time
-  const istTime = getISTTime();
   
   // Step 4: Create parking system
   const parkingSystem = await ParkingSystem.create({
