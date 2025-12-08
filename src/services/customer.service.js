@@ -111,7 +111,76 @@ const createCustomer = async (customerData) => {
   };
 };
 
+// Get Customer Profile Service
+const getCustomerProfile = async (userId) => {
+  // Find customer by userId
+  const customer = await Customer.findOne({
+    where: { UserId: userId },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role', 'CreatedAt', 'UpdatedAt']
+      },
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      }
+    ]
+  });
+
+  if (!customer) {
+    throw new Error('Customer profile not found');
+  }
+
+  return {
+    user: {
+      id: customer.user.Id,
+      username: customer.user.Username,
+      role: customer.user.Role,
+      createdAt: customer.user.CreatedAt,
+      updatedAt: customer.user.UpdatedAt
+    },
+    customer: {
+      id: customer.Id,
+      userId: customer.UserId,
+      firstName: customer.FirstName,
+      lastName: customer.LastName,
+      email: customer.Email,
+      mobileNumber: customer.MobileNumber,
+      projectId: customer.ProjectId,
+      project: customer.project ? {
+        id: customer.project.Id,
+        projectName: customer.project.ProjectName,
+        societyName: customer.project.SocietyName
+      } : null,
+      parkingSystemId: customer.ParkingSystemId,
+      parkingSystem: customer.parkingSystem ? {
+        id: customer.parkingSystem.Id,
+        wingName: customer.parkingSystem.WingName,
+        type: customer.parkingSystem.Type,
+        level: customer.parkingSystem.Level,
+        column: customer.parkingSystem.Column
+      } : null,
+      flatNumber: customer.FlatNumber,
+      profession: customer.Profession,
+      status: customer.Status,
+      approvedBy: customer.ApprovedBy,
+      approvedAt: customer.ApprovedAt,
+      createdAt: customer.CreatedAt,
+      updatedAt: customer.UpdatedAt
+    }
+  };
+};
+
 module.exports = {
-  createCustomer
+  createCustomer,
+  getCustomerProfile
 };
 

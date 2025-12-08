@@ -32,7 +32,23 @@ const createCustomer = async (req, res) => {
   }
 };
 
+// Get Customer Profile Controller
+const getCustomerProfile = async (req, res) => {
+  try {
+    const userId = req.user.id; // Get userId from authenticated session
+    
+    const result = await customerService.getCustomerProfile(userId);
+    
+    return successResponse(res, result, 'Customer profile retrieved successfully');
+  } catch (error) {
+    console.error('Get customer profile error:', error);
+    const statusCode = error.message === 'Customer profile not found' ? 404 : 500;
+    return errorResponse(res, error.message || 'Failed to retrieve customer profile', statusCode);
+  }
+};
+
 module.exports = {
-  createCustomer
+  createCustomer,
+  getCustomerProfile
 };
 

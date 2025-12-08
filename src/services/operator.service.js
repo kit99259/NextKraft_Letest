@@ -108,7 +108,137 @@ const createOperator = async (operatorData) => {
   };
 };
 
+// Get Operator Profile Service
+const getOperatorProfile = async (userId) => {
+  // Find operator by userId
+  const operator = await Operator.findOne({
+    where: { UserId: userId },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role', 'CreatedAt', 'UpdatedAt']
+      },
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      }
+    ]
+  });
+
+  if (!operator) {
+    throw new Error('Operator profile not found');
+  }
+
+  return {
+    user: {
+      id: operator.user.Id,
+      username: operator.user.Username,
+      role: operator.user.Role,
+      createdAt: operator.user.CreatedAt,
+      updatedAt: operator.user.UpdatedAt
+    },
+    operator: {
+      id: operator.Id,
+      userId: operator.UserId,
+      firstName: operator.FirstName,
+      lastName: operator.LastName,
+      email: operator.Email,
+      mobileNumber: operator.MobileNumber,
+      projectId: operator.ProjectId,
+      project: operator.project ? {
+        id: operator.project.Id,
+        projectName: operator.project.ProjectName,
+        societyName: operator.project.SocietyName
+      } : null,
+      parkingSystemId: operator.ParkingSystemId,
+      parkingSystem: operator.parkingSystem ? {
+        id: operator.parkingSystem.Id,
+        wingName: operator.parkingSystem.WingName,
+        type: operator.parkingSystem.Type,
+        level: operator.parkingSystem.Level,
+        column: operator.parkingSystem.Column
+      } : null,
+      status: operator.Status,
+      hasPalletPower: operator.HasPalletPower,
+      approvedBy: operator.ApprovedBy,
+      approvedAt: operator.ApprovedAt,
+      createdAt: operator.CreatedAt,
+      updatedAt: operator.UpdatedAt
+    }
+  };
+};
+
+// Get Operator List Service (Admin only)
+const getOperatorList = async () => {
+  // Find all operators with related data
+  const operators = await Operator.findAll({
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role', 'CreatedAt', 'UpdatedAt']
+      },
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      }
+    ],
+    order: [['CreatedAt', 'DESC']]
+  });
+
+  return operators.map(operator => ({
+    id: operator.Id,
+    userId: operator.UserId,
+    user: {
+      id: operator.user.Id,
+      username: operator.user.Username,
+      role: operator.user.Role,
+      createdAt: operator.user.CreatedAt,
+      updatedAt: operator.user.UpdatedAt
+    },
+    firstName: operator.FirstName,
+    lastName: operator.LastName,
+    email: operator.Email,
+    mobileNumber: operator.MobileNumber,
+    projectId: operator.ProjectId,
+    project: operator.project ? {
+      id: operator.project.Id,
+      projectName: operator.project.ProjectName,
+      societyName: operator.project.SocietyName
+    } : null,
+    parkingSystemId: operator.ParkingSystemId,
+    parkingSystem: operator.parkingSystem ? {
+      id: operator.parkingSystem.Id,
+      wingName: operator.parkingSystem.WingName,
+      type: operator.parkingSystem.Type,
+      level: operator.parkingSystem.Level,
+      column: operator.parkingSystem.Column
+    } : null,
+    status: operator.Status,
+    hasPalletPower: operator.HasPalletPower,
+    approvedBy: operator.ApprovedBy,
+    approvedAt: operator.ApprovedAt,
+    createdAt: operator.CreatedAt,
+    updatedAt: operator.UpdatedAt
+  }));
+};
+
 module.exports = {
-  createOperator
+  createOperator,
+  getOperatorProfile,
+  getOperatorList
 };
 

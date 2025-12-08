@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { authenticate } = require('../middleware/auth.middleware');
 const customerController = require('../controllers/customer.controller');
 const { validateCreateCustomer } = require('../validators/customer.validator');
 
@@ -147,6 +148,116 @@ const { validateCreateCustomer } = require('../validators/customer.validator');
  *         description: Project or parking system not found
  */
 router.post('/', validateCreateCustomer, customerController.createCustomer);
+
+/**
+ * @swagger
+ * /api/customer/profile:
+ *   get:
+ *     summary: Get current customer profile (Authentication required)
+ *     tags: [Customer]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Customer profile retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         username:
+ *                           type: string
+ *                         role:
+ *                           type: string
+ *                           example: "customer"
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *                     customer:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         userId:
+ *                           type: integer
+ *                         firstName:
+ *                           type: string
+ *                         lastName:
+ *                           type: string
+ *                         email:
+ *                           type: string
+ *                         mobileNumber:
+ *                           type: string
+ *                         projectId:
+ *                           type: integer
+ *                         project:
+ *                           type: object
+ *                           nullable: true
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             projectName:
+ *                               type: string
+ *                             societyName:
+ *                               type: string
+ *                         parkingSystemId:
+ *                           type: integer
+ *                           nullable: true
+ *                         parkingSystem:
+ *                           type: object
+ *                           nullable: true
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             wingName:
+ *                               type: string
+ *                             type:
+ *                               type: string
+ *                             level:
+ *                               type: integer
+ *                             column:
+ *                               type: integer
+ *                         flatNumber:
+ *                           type: string
+ *                         profession:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                           enum: [Approved, Rejected, Pending]
+ *                         approvedBy:
+ *                           type: integer
+ *                           nullable: true
+ *                         approvedAt:
+ *                           type: string
+ *                           format: date-time
+ *                           nullable: true
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *       401:
+ *         description: Unauthorized - Authentication required
+ *       404:
+ *         description: Customer profile not found
+ */
+router.get('/profile', authenticate, customerController.getCustomerProfile);
 
 module.exports = router;
 

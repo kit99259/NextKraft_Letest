@@ -31,7 +31,36 @@ const createOperator = async (req, res) => {
   }
 };
 
+// Get Operator Profile Controller
+const getOperatorProfile = async (req, res) => {
+  try {
+    const userId = req.user.id; // Get userId from authenticated session
+    
+    const result = await operatorService.getOperatorProfile(userId);
+    
+    return successResponse(res, result, 'Operator profile retrieved successfully');
+  } catch (error) {
+    console.error('Get operator profile error:', error);
+    const statusCode = error.message === 'Operator profile not found' ? 404 : 500;
+    return errorResponse(res, error.message || 'Failed to retrieve operator profile', statusCode);
+  }
+};
+
+// Get Operator List Controller (Admin only)
+const getOperatorList = async (req, res) => {
+  try {
+    const result = await operatorService.getOperatorList();
+    
+    return successResponse(res, { operators: result, count: result.length }, 'Operator list retrieved successfully');
+  } catch (error) {
+    console.error('Get operator list error:', error);
+    return errorResponse(res, error.message || 'Failed to retrieve operator list', 500);
+  }
+};
+
 module.exports = {
-  createOperator
+  createOperator,
+  getOperatorProfile,
+  getOperatorList
 };
 
