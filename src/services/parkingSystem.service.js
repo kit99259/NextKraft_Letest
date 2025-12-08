@@ -1,4 +1,4 @@
-const { Project, ParkingSystem, PalletAllotment } = require('../models/associations');
+const { Project, ParkingSystem, PalletAllotment, Car, User } = require('../models/associations');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -152,8 +152,110 @@ const getProjectListWithParkingSystems = async () => {
   }));
 };
 
+// Get Pallet Details Service (Admin and Operator)
+const getPalletDetails = async (projectId, parkingSystemId) => {
+  // Validate project exists
+  const project = await Project.findByPk(projectId);
+  if (!project) {
+    throw new Error('Project not found');
+  }
+
+  // Validate parking system exists and belongs to the project
+  const parkingSystem = await ParkingSystem.findOne({
+    where: {
+      Id: parkingSystemId,
+      ProjectId: projectId
+    }
+  });
+
+  if (!parkingSystem) {
+    throw new Error('Parking system not found or does not belong to the specified project');
+  }
+
+  // Find all pallet details for the specified project and parking system
+  const palletDetails = await PalletAllotment.findAll({
+    where: {
+      ProjectId: projectId,
+      ParkingSystemId: parkingSystemId
+    },
+    include: [
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber'],
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['Id', 'Username']
+          }
+        ]
+      },
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      }
+    ],
+    order: [
+      ['Level', 'ASC'],
+      ['Column', 'ASC']
+    ]
+  });
+
+  return {
+    project: {
+      id: project.Id,
+      projectName: project.ProjectName,
+      societyName: project.SocietyName
+    },
+    parkingSystem: {
+      id: parkingSystem.Id,
+      wingName: parkingSystem.WingName,
+      projectId: parkingSystem.ProjectId,
+      type: parkingSystem.Type,
+      level: parkingSystem.Level,
+      column: parkingSystem.Column,
+      totalNumberOfPallet: parkingSystem.TotalNumberOfPallet,
+      timeForEachLevel: parkingSystem.TimeForEachLevel,
+      timeForHorizontalMove: parkingSystem.TimeForHorizontalMove
+    },
+    palletDetails: palletDetails.map(pallet => ({
+      id: pallet.Id,
+      userId: pallet.UserId,
+      projectId: pallet.ProjectId,
+      parkingSystemId: pallet.ParkingSystemId,
+      level: pallet.Level,
+      column: pallet.Column,
+      userGivenPalletNumber: pallet.UserGivenPalletNumber,
+      carId: pallet.CarId,
+      car: pallet.car ? {
+        id: pallet.car.Id,
+        carType: pallet.car.CarType,
+        carModel: pallet.car.CarModel,
+        carCompany: pallet.car.CarCompany,
+        carNumber: pallet.car.CarNumber,
+        user: pallet.car.user ? {
+          id: pallet.car.user.Id,
+          username: pallet.car.user.Username
+        } : null
+      } : null,
+      status: pallet.Status,
+      createdAt: pallet.CreatedAt,
+      updatedAt: pallet.UpdatedAt
+    })),
+    count: palletDetails.length
+  };
+};
+
 module.exports = {
   createParkingSystem,
-  getProjectListWithParkingSystems
+  getProjectListWithParkingSystems,
+  getPalletDetails
 };
 

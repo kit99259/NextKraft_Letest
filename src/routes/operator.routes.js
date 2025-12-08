@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const operatorController = require('../controllers/operator.controller');
+const parkingSystemController = require('../controllers/parkingSystem.controller');
 const { validateCreateOperator } = require('../validators/operator.validator');
+const { validateAssignPallet } = require('../validators/pallet.validator');
 
 // All routes require authentication
 router.use(authenticate);
@@ -361,6 +363,383 @@ router.get('/list', authorize('admin'), operatorController.getOperatorList);
  *         description: Operator profile not found
  */
 router.get('/profile', authorize('operator'), operatorController.getOperatorProfile);
+
+/**
+ * @swagger
+ * /api/operator/project:
+ *   get:
+ *     summary: Get operator's assigned project and its parking systems (Operator only)
+ *     description: Returns the project assigned to the operator and all parking systems for that project with basic details (no pallet details).
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Project and parking systems retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     project:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         projectName:
+ *                           type: string
+ *                         societyName:
+ *                           type: string
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *                     parkingSystems:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           wingName:
+ *                             type: string
+ *                           projectId:
+ *                             type: integer
+ *                           type:
+ *                             type: string
+ *                             enum: [Tower, Puzzle]
+ *                           level:
+ *                             type: integer
+ *                           column:
+ *                             type: integer
+ *                           totalNumberOfPallet:
+ *                             type: integer
+ *                           timeForEachLevel:
+ *                             type: integer
+ *                           timeForHorizontalMove:
+ *                             type: integer
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of parking systems
+ *       401:
+ *         description: Unauthorized - Authentication required
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator profile not found or operator not assigned to any project
+ */
+router.get('/project', authorize('operator'), operatorController.getOperatorProjectWithParkingSystems);
+
+/**
+ * @swagger
+ * /api/operator/pallet-details:
+ *   get:
+ *     summary: Get all pallet details for a specific project and parking system (Admin and Operator)
+ *     description: Returns all pallet details including car information for the specified project and parking system.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Project ID
+ *         example: 1
+ *       - in: query
+ *         name: parkingSystemId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Parking System ID
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Pallet details retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     project:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         projectName:
+ *                           type: string
+ *                         societyName:
+ *                           type: string
+ *                     parkingSystem:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         wingName:
+ *                           type: string
+ *                         projectId:
+ *                           type: integer
+ *                         type:
+ *                           type: string
+ *                           enum: [Tower, Puzzle]
+ *                         level:
+ *                           type: integer
+ *                         column:
+ *                           type: integer
+ *                         totalNumberOfPallet:
+ *                           type: integer
+ *                         timeForEachLevel:
+ *                           type: integer
+ *                         timeForHorizontalMove:
+ *                           type: integer
+ *                     palletDetails:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           userId:
+ *                             type: integer
+ *                           projectId:
+ *                             type: integer
+ *                           parkingSystemId:
+ *                             type: integer
+ *                           level:
+ *                             type: integer
+ *                           column:
+ *                             type: integer
+ *                           userGivenPalletNumber:
+ *                             type: string
+ *                           carId:
+ *                             type: integer
+ *                             nullable: true
+ *                           car:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               carType:
+ *                                 type: string
+ *                               carModel:
+ *                                 type: string
+ *                               carCompany:
+ *                                 type: string
+ *                               carNumber:
+ *                                 type: string
+ *                               user:
+ *                                 type: object
+ *                                 nullable: true
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   username:
+ *                                     type: string
+ *                           status:
+ *                             type: string
+ *                             enum: [Assigned, Released]
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of pallets
+ *       400:
+ *         description: Project ID and Parking System ID are required
+ *       404:
+ *         description: Project or parking system not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin or Operator access required
+ */
+router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemController.getPalletDetails);
+
+/**
+ * @swagger
+ * /api/operator/assign-pallet:
+ *   post:
+ *     summary: Assign a customer to a specific pallet (Operator only)
+ *     description: Assigns a customer and their car to a specific pallet. The pallet must be released and the customer must be approved.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - palletId
+ *               - customerId
+ *             properties:
+ *               palletId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: ID of the pallet to assign
+ *                 example: 1
+ *               customerId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: ID of the customer to assign
+ *                 example: 1
+ *               carId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: ID of the car to assign (optional, will use customer's first car if not provided)
+ *                 example: 1
+ *     responses:
+ *       200:
+ *         description: Pallet assigned to customer successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     pallet:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         userId:
+ *                           type: integer
+ *                         projectId:
+ *                           type: integer
+ *                         parkingSystemId:
+ *                           type: integer
+ *                         level:
+ *                           type: integer
+ *                         column:
+ *                           type: integer
+ *                         userGivenPalletNumber:
+ *                           type: string
+ *                         carId:
+ *                           type: integer
+ *                         car:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             carType:
+ *                               type: string
+ *                             carModel:
+ *                               type: string
+ *                             carCompany:
+ *                               type: string
+ *                             carNumber:
+ *                               type: string
+ *                             user:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 username:
+ *                                   type: string
+ *                         status:
+ *                           type: string
+ *                           enum: [Assigned, Released]
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *                     customer:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         userId:
+ *                           type: integer
+ *                         firstName:
+ *                           type: string
+ *                         lastName:
+ *                           type: string
+ *                         email:
+ *                           type: string
+ *                         mobileNumber:
+ *                           type: string
+ *                         projectId:
+ *                           type: integer
+ *                         parkingSystemId:
+ *                           type: integer
+ *                         flatNumber:
+ *                           type: string
+ *                         profession:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                           enum: [Approved, Rejected, Pending]
+ *                     project:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         projectName:
+ *                           type: string
+ *                         societyName:
+ *                           type: string
+ *                     parkingSystem:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         wingName:
+ *                           type: string
+ *                         type:
+ *                           type: string
+ *                           enum: [Tower, Puzzle]
+ *                         level:
+ *                           type: integer
+ *                         column:
+ *                           type: integer
+ *       400:
+ *         description: Validation error, pallet already assigned, car already assigned, customer not approved, or customer has no cars
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Pallet, customer, or car not found
+ */
+router.post('/assign-pallet', authorize('operator'), validateAssignPallet, operatorController.assignPalletToCustomer);
 
 module.exports = router;
 

@@ -386,5 +386,117 @@ router.post('/car', authenticate, validateCreateCar, customerController.createCa
  */
 router.get('/car', authenticate, customerController.getCarList);
 
+/**
+ * @swagger
+ * /api/customer/pallet-status:
+ *   get:
+ *     summary: Get pallet status for current customer (Customer authentication required)
+ *     description: Returns all pallets assigned to the authenticated customer. Returns empty list if no pallets are assigned.
+ *     tags: [Customer]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Pallet status retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     pallets:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           userId:
+ *                             type: integer
+ *                           projectId:
+ *                             type: integer
+ *                           parkingSystemId:
+ *                             type: integer
+ *                           level:
+ *                             type: integer
+ *                           column:
+ *                             type: integer
+ *                           userGivenPalletNumber:
+ *                             type: string
+ *                           carId:
+ *                             type: integer
+ *                             nullable: true
+ *                           car:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               carType:
+ *                                 type: string
+ *                               carModel:
+ *                                 type: string
+ *                               carCompany:
+ *                                 type: string
+ *                               carNumber:
+ *                                 type: string
+ *                               user:
+ *                                 type: object
+ *                                 nullable: true
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   username:
+ *                                     type: string
+ *                           status:
+ *                             type: string
+ *                             enum: [Assigned, Released]
+ *                           project:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               projectName:
+ *                                 type: string
+ *                               societyName:
+ *                                 type: string
+ *                           parkingSystem:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               wingName:
+ *                                 type: string
+ *                               type:
+ *                                 type: string
+ *                                 enum: [Tower, Puzzle]
+ *                               level:
+ *                                 type: integer
+ *                               column:
+ *                                 type: integer
+ *                               totalNumberOfPallet:
+ *                                 type: integer
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of assigned pallets (0 if none assigned)
+ *       401:
+ *         description: Unauthorized - Authentication required
+ */
+router.get('/pallet-status', authenticate, customerController.getCustomerPalletStatus);
+
 module.exports = router;
 

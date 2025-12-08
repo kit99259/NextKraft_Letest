@@ -219,5 +219,144 @@ router.post('/create-parking-system', validateCreateParkingSystem, parkingSystem
  */
 router.get('/projects', parkingSystemController.getProjectListWithParkingSystems);
 
+/**
+ * @swagger
+ * /api/admin/pallet-details:
+ *   get:
+ *     summary: Get all pallet details for a specific project and parking system (Admin and Operator)
+ *     description: Returns all pallet details including car information for the specified project and parking system.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Project ID
+ *         example: 1
+ *       - in: query
+ *         name: parkingSystemId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Parking System ID
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Pallet details retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     project:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         projectName:
+ *                           type: string
+ *                         societyName:
+ *                           type: string
+ *                     parkingSystem:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         wingName:
+ *                           type: string
+ *                         projectId:
+ *                           type: integer
+ *                         type:
+ *                           type: string
+ *                           enum: [Tower, Puzzle]
+ *                         level:
+ *                           type: integer
+ *                         column:
+ *                           type: integer
+ *                         totalNumberOfPallet:
+ *                           type: integer
+ *                         timeForEachLevel:
+ *                           type: integer
+ *                         timeForHorizontalMove:
+ *                           type: integer
+ *                     palletDetails:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           userId:
+ *                             type: integer
+ *                           projectId:
+ *                             type: integer
+ *                           parkingSystemId:
+ *                             type: integer
+ *                           level:
+ *                             type: integer
+ *                           column:
+ *                             type: integer
+ *                           userGivenPalletNumber:
+ *                             type: string
+ *                           carId:
+ *                             type: integer
+ *                             nullable: true
+ *                           car:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               carType:
+ *                                 type: string
+ *                               carModel:
+ *                                 type: string
+ *                               carCompany:
+ *                                 type: string
+ *                               carNumber:
+ *                                 type: string
+ *                               user:
+ *                                 type: object
+ *                                 nullable: true
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   username:
+ *                                     type: string
+ *                           status:
+ *                             type: string
+ *                             enum: [Assigned, Released]
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of pallets
+ *       400:
+ *         description: Project ID and Parking System ID are required
+ *       404:
+ *         description: Project or parking system not found
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin or Operator access required
+ */
+router.get('/pallet-details', parkingSystemController.getPalletDetails);
+
 module.exports = router;
 

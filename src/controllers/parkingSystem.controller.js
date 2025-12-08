@@ -37,8 +37,32 @@ const getProjectListWithParkingSystems = async (req, res) => {
   }
 };
 
+// Get Pallet Details Controller (Admin and Operator)
+const getPalletDetails = async (req, res) => {
+  try {
+    const { projectId, parkingSystemId } = req.query;
+    
+    if (!projectId || !parkingSystemId) {
+      return errorResponse(res, 'Project ID and Parking System ID are required', 400);
+    }
+
+    const result = await parkingSystemService.getPalletDetails(
+      parseInt(projectId),
+      parseInt(parkingSystemId)
+    );
+    
+    return successResponse(res, result, 'Pallet details retrieved successfully');
+  } catch (error) {
+    console.error('Get pallet details error:', error);
+    const statusCode = error.message === 'Project not found' || 
+                       error.message === 'Parking system not found or does not belong to the specified project' ? 404 : 500;
+    return errorResponse(res, error.message || 'Failed to retrieve pallet details', statusCode);
+  }
+};
+
 module.exports = {
   createParkingSystem,
-  getProjectListWithParkingSystems
+  getProjectListWithParkingSystems,
+  getPalletDetails
 };
 

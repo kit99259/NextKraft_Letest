@@ -1,4 +1,4 @@
-const { User, Customer, ParkingSystem, Project, Car } = require('../models/associations');
+const { User, Customer, ParkingSystem, Project, Car, PalletAllotment } = require('../models/associations');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -227,10 +227,85 @@ const getCarList = async (userId) => {
   }));
 };
 
+// Get Customer Pallet Status Service
+const getCustomerPalletStatus = async (userId) => {
+  // Find all pallets assigned to the customer
+  const pallets = await PalletAllotment.findAll({
+    where: {
+      UserId: userId,
+      Status: 'Assigned'
+    },
+    include: [
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber'],
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['Id', 'Username']
+          }
+        ]
+      },
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column', 'TotalNumberOfPallet']
+      }
+    ],
+    order: [['CreatedAt', 'DESC']]
+  });
+
+  return pallets.map(pallet => ({
+    id: pallet.Id,
+    userId: pallet.UserId,
+    projectId: pallet.ProjectId,
+    parkingSystemId: pallet.ParkingSystemId,
+    level: pallet.Level,
+    column: pallet.Column,
+    userGivenPalletNumber: pallet.UserGivenPalletNumber,
+    carId: pallet.CarId,
+    car: pallet.car ? {
+      id: pallet.car.Id,
+      carType: pallet.car.CarType,
+      carModel: pallet.car.CarModel,
+      carCompany: pallet.car.CarCompany,
+      carNumber: pallet.car.CarNumber,
+      user: pallet.car.user ? {
+        id: pallet.car.user.Id,
+        username: pallet.car.user.Username
+      } : null
+    } : null,
+    status: pallet.Status,
+    project: pallet.project ? {
+      id: pallet.project.Id,
+      projectName: pallet.project.ProjectName,
+      societyName: pallet.project.SocietyName
+    } : null,
+    parkingSystem: pallet.parkingSystem ? {
+      id: pallet.parkingSystem.Id,
+      wingName: pallet.parkingSystem.WingName,
+      type: pallet.parkingSystem.Type,
+      level: pallet.parkingSystem.Level,
+      column: pallet.parkingSystem.Column,
+      totalNumberOfPallet: pallet.parkingSystem.TotalNumberOfPallet
+    } : null,
+    createdAt: pallet.CreatedAt,
+    updatedAt: pallet.UpdatedAt
+  }));
+};
+
 module.exports = {
   createCustomer,
   getCustomerProfile,
   createCar,
-  getCarList
+  getCarList,
+  getCustomerPalletStatus
 };
 

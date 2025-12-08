@@ -82,10 +82,25 @@ const getCarList = async (req, res) => {
   }
 };
 
+// Get Customer Pallet Status Controller
+const getCustomerPalletStatus = async (req, res) => {
+  try {
+    const userId = req.user.id; // Get userId from authenticated session
+    
+    const result = await customerService.getCustomerPalletStatus(userId);
+    
+    return successResponse(res, { pallets: result, count: result.length }, 'Pallet status retrieved successfully');
+  } catch (error) {
+    console.error('Get customer pallet status error:', error);
+    return errorResponse(res, error.message || 'Failed to retrieve pallet status', 500);
+  }
+};
+
 module.exports = {
   createCustomer,
   getCustomerProfile,
   createCar,
-  getCarList
+  getCarList,
+  getCustomerPalletStatus
 };
 

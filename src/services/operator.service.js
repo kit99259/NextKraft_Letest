@@ -1,4 +1,4 @@
-const { User, Operator, Project, ParkingSystem } = require('../models/associations');
+const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car } = require('../models/associations');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -236,9 +236,274 @@ const getOperatorList = async () => {
   }));
 };
 
+// Get Operator Project with Parking Systems Service
+const getOperatorProjectWithParkingSystems = async (userId) => {
+  // Find operator by userId
+  const operator = await Operator.findOne({
+    where: { UserId: userId },
+    include: [
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName', 'CreatedAt', 'UpdatedAt']
+      }
+    ]
+  });
+
+  if (!operator) {
+    throw new Error('Operator profile not found');
+  }
+
+  if (!operator.ProjectId) {
+    throw new Error('Operator is not assigned to any project');
+  }
+
+  const projectId = operator.ProjectId;
+
+  // Get all parking systems for this project (basic details only, no pallet details)
+  const parkingSystems = await ParkingSystem.findAll({
+    where: { ProjectId: projectId },
+    attributes: [
+      'Id',
+      'WingName',
+      'ProjectId',
+      'Type',
+      'Level',
+      'Column',
+      'TotalNumberOfPallet',
+      'TimeForEachLevel',
+      'TimeForHorizontalMove',
+      'CreatedAt',
+      'UpdatedAt'
+    ],
+    order: [['CreatedAt', 'ASC']]
+  });
+
+  return {
+    project: {
+      id: operator.project.Id,
+      projectName: operator.project.ProjectName,
+      societyName: operator.project.SocietyName,
+      createdAt: operator.project.CreatedAt,
+      updatedAt: operator.project.UpdatedAt
+    },
+    parkingSystems: parkingSystems.map(parkingSystem => ({
+      id: parkingSystem.Id,
+      wingName: parkingSystem.WingName,
+      projectId: parkingSystem.ProjectId,
+      type: parkingSystem.Type,
+      level: parkingSystem.Level,
+      column: parkingSystem.Column,
+      totalNumberOfPallet: parkingSystem.TotalNumberOfPallet,
+      timeForEachLevel: parkingSystem.TimeForEachLevel,
+      timeForHorizontalMove: parkingSystem.TimeForHorizontalMove,
+      createdAt: parkingSystem.CreatedAt,
+      updatedAt: parkingSystem.UpdatedAt
+    })),
+    count: parkingSystems.length
+  };
+};
+
+// Assign Pallet to Customer Service
+const assignPalletToCustomer = async (operatorUserId, palletId, customerId, carId) => {
+  // Step 1: Validate operator exists and get operator details
+  const operator = await Operator.findOne({
+    where: { UserId: operatorUserId }
+  });
+
+  if (!operator) {
+    throw new Error('Operator profile not found');
+  }
+
+  // Step 2: Find the pallet
+  const pallet = await PalletAllotment.findByPk(palletId, {
+    include: [
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      }
+    ]
+  });
+
+  if (!pallet) {
+    throw new Error('Pallet not found');
+  }
+
+  // Step 3: Validate pallet is released (not already assigned)
+  if (pallet.Status === 'Assigned' && pallet.UserId !== 0) {
+    throw new Error('Pallet is already assigned to another customer');
+  }
+
+  // Step 4: Validate operator has access to this project
+  if (operator.ProjectId !== pallet.ProjectId) {
+    throw new Error('Operator does not have access to this project');
+  }
+
+  // Step 5: Find customer
+  const customer = await Customer.findByPk(customerId, {
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      }
+    ]
+  });
+
+  if (!customer) {
+    throw new Error('Customer not found');
+  }
+
+  // Step 6: Validate customer is approved
+  if (customer.Status !== 'Approved') {
+    throw new Error('Customer is not approved. Only approved customers can be assigned to pallets');
+  }
+
+  // Step 7: Validate customer belongs to the same project
+  if (customer.ProjectId !== pallet.ProjectId) {
+    throw new Error('Customer does not belong to the same project as the pallet');
+  }
+
+  // Step 8: Get or validate car
+  let car = null;
+  if (carId) {
+    car = await Car.findOne({
+      where: {
+        Id: carId,
+        UserId: customer.UserId
+      }
+    });
+
+    if (!car) {
+      throw new Error('Car not found or does not belong to the customer');
+    }
+  } else {
+    // If carId not provided, get customer's first car
+    car = await Car.findOne({
+      where: { UserId: customer.UserId },
+      order: [['CreatedAt', 'ASC']]
+    });
+
+    if (!car) {
+      throw new Error('Customer has no cars. Please provide a car ID or add a car first');
+    }
+  }
+
+  // Step 9: Check if car is already assigned to another pallet
+  const existingPalletAssignment = await PalletAllotment.findOne({
+    where: {
+      CarId: car.Id,
+      Status: 'Assigned',
+      Id: { [require('sequelize').Op.ne]: palletId } // Exclude current pallet
+    }
+  });
+
+  if (existingPalletAssignment) {
+    throw new Error('Car is already assigned to another pallet');
+  }
+
+  // Step 10: Update pallet with customer and car information
+  const istTime = getISTTime();
+
+  await pallet.update({
+    UserId: customer.UserId,
+    CarId: car.Id,
+    Status: 'Assigned',
+    UpdatedAt: istTime
+  });
+
+  // Step 11: Reload pallet with associations
+  await pallet.reload({
+    include: [
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber'],
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['Id', 'Username']
+          }
+        ]
+      },
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      }
+    ]
+  });
+
+  return {
+    pallet: {
+      id: pallet.Id,
+      userId: pallet.UserId,
+      projectId: pallet.ProjectId,
+      parkingSystemId: pallet.ParkingSystemId,
+      level: pallet.Level,
+      column: pallet.Column,
+      userGivenPalletNumber: pallet.UserGivenPalletNumber,
+      carId: pallet.CarId,
+      car: pallet.car ? {
+        id: pallet.car.Id,
+        carType: pallet.car.CarType,
+        carModel: pallet.car.CarModel,
+        carCompany: pallet.car.CarCompany,
+        carNumber: pallet.car.CarNumber,
+        user: pallet.car.user ? {
+          id: pallet.car.user.Id,
+          username: pallet.car.user.Username
+        } : null
+      } : null,
+      status: pallet.Status,
+      createdAt: pallet.CreatedAt,
+      updatedAt: pallet.UpdatedAt
+    },
+    customer: {
+      id: customer.Id,
+      userId: customer.UserId,
+      firstName: customer.FirstName,
+      lastName: customer.LastName,
+      email: customer.Email,
+      mobileNumber: customer.MobileNumber,
+      projectId: customer.ProjectId,
+      parkingSystemId: customer.ParkingSystemId,
+      flatNumber: customer.FlatNumber,
+      profession: customer.Profession,
+      status: customer.Status
+    },
+    project: {
+      id: pallet.project.Id,
+      projectName: pallet.project.ProjectName,
+      societyName: pallet.project.SocietyName
+    },
+    parkingSystem: {
+      id: pallet.parkingSystem.Id,
+      wingName: pallet.parkingSystem.WingName,
+      type: pallet.parkingSystem.Type,
+      level: pallet.parkingSystem.Level,
+      column: pallet.parkingSystem.Column
+    }
+  };
+};
+
 module.exports = {
   createOperator,
   getOperatorProfile,
-  getOperatorList
+  getOperatorList,
+  getOperatorProjectWithParkingSystems,
+  assignPalletToCustomer
 };
 
