@@ -1,20 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth.middleware');
 const customerController = require('../controllers/customer.controller');
 const { validateCreateCustomer } = require('../validators/customer.validator');
-
-// All customer routes require authentication
-router.use(authenticate);
 
 /**
  * @swagger
  * /api/customer:
  *   post:
- *     summary: Create a new customer profile
+ *     summary: Create a new customer account with profile (No authentication required)
  *     tags: [Customer]
- *     security:
- *       - bearerAuth: []
+ *     security: []  # No authentication required
  *     requestBody:
  *       required: true
  *       content:
@@ -22,8 +17,23 @@ router.use(authenticate);
  *           schema:
  *             type: object
  *             required:
+ *               - username
+ *               - password
  *               - firstName
  *             properties:
+ *               username:
+ *                 type: string
+ *                 description: Username for customer login. Must be unique across all users.
+ *                 minLength: 3
+ *                 maxLength: 100
+ *                 pattern: "^[a-zA-Z0-9_]+$"
+ *                 example: "customer_01"
+ *               password:
+ *                 type: string
+ *                 description: Password for customer account. Will be hashed before storage.
+ *                 minLength: 6
+ *                 format: password
+ *                 example: "password123"
  *               firstName:
  *                 type: string
  *                 minLength: 1
@@ -42,10 +52,16 @@ router.use(authenticate);
  *                 type: string
  *                 maxLength: 20
  *                 example: "+919876543210"
+ *               projectId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 example: 1
+ *                 description: Either projectId or parkingSystemId is required
  *               parkingSystemId:
  *                 type: integer
  *                 minimum: 1
  *                 example: 1
+ *                 description: Either projectId or parkingSystemId is required
  *               flatNumber:
  *                 type: string
  *                 maxLength: 50
@@ -56,7 +72,7 @@ router.use(authenticate);
  *                 example: "Engineer"
  *     responses:
  *       201:
- *         description: Customer created successfully
+ *         description: Customer created successfully (Status will be Pending, awaiting admin approval)
  *         content:
  *           application/json:
  *             schema:
@@ -69,39 +85,66 @@ router.use(authenticate);
  *                 data:
  *                   type: object
  *                   properties:
- *                     id:
- *                       type: integer
- *                     firstName:
- *                       type: string
- *                     lastName:
- *                       type: string
- *                     email:
- *                       type: string
- *                     mobileNumber:
- *                       type: string
- *                     parkingSystemId:
- *                       type: integer
- *                     projectId:
- *                       type: integer
- *                     flatNumber:
- *                       type: string
- *                     profession:
- *                       type: string
- *                     status:
- *                       type: string
- *                       enum: [Approved, Rejected, Pending]
- *                     createdAt:
- *                       type: string
- *                       format: date-time
- *                     updatedAt:
- *                       type: string
- *                       format: date-time
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         username:
+ *                           type: string
+ *                         role:
+ *                           type: string
+ *                           example: "customer"
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *                     customer:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         userId:
+ *                           type: integer
+ *                         firstName:
+ *                           type: string
+ *                         lastName:
+ *                           type: string
+ *                         email:
+ *                           type: string
+ *                         mobileNumber:
+ *                           type: string
+ *                         projectId:
+ *                           type: integer
+ *                         parkingSystemId:
+ *                           type: integer
+ *                         flatNumber:
+ *                           type: string
+ *                         profession:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                           enum: [Approved, Rejected, Pending]
+ *                           example: "Pending"
+ *                         approvedBy:
+ *                           type: integer
+ *                           nullable: true
+ *                         approvedAt:
+ *                           type: string
+ *                           format: date-time
+ *                           nullable: true
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
  *       400:
- *         description: Validation error or customer already exists
+ *         description: Validation error, username already exists, or missing projectId/parkingSystemId
  *       404:
- *         description: Parking system not found
- *       401:
- *         description: Unauthorized
+ *         description: Project or parking system not found
  */
 router.post('/', validateCreateCustomer, customerController.createCustomer);
 

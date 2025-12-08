@@ -15,6 +15,21 @@ const handleValidationErrors = (req, res, next) => {
 
 // Create customer validation rules
 const validateCreateCustomer = [
+  body('username')
+    .trim()
+    .notEmpty()
+    .withMessage('Username is required')
+    .isLength({ min: 3, max: 100 })
+    .withMessage('Username must be between 3 and 100 characters')
+    .matches(/^[a-zA-Z0-9_]+$/)
+    .withMessage('Username can only contain letters, numbers, and underscores'),
+  
+  body('password')
+    .notEmpty()
+    .withMessage('Password is required')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters long'),
+  
   body('firstName')
     .trim()
     .notEmpty()
@@ -42,6 +57,11 @@ const validateCreateCustomer = [
     .isLength({ max: 20 })
     .withMessage('Mobile number must not exceed 20 characters'),
   
+  body('projectId')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Project ID must be a valid integer'),
+  
   body('parkingSystemId')
     .optional()
     .isInt({ min: 1 })
@@ -58,6 +78,14 @@ const validateCreateCustomer = [
     .trim()
     .isLength({ max: 100 })
     .withMessage('Profession must not exceed 100 characters'),
+  
+  // Custom validation: either projectId or parkingSystemId must be provided
+  body().custom((value) => {
+    if (!value.projectId && !value.parkingSystemId) {
+      throw new Error('Either projectId or parkingSystemId is required');
+    }
+    return true;
+  }),
   
   handleValidationErrors
 ];
