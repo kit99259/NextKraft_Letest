@@ -1,4 +1,4 @@
-const { User, Customer, ParkingSystem, Project, Car, PalletAllotment } = require('../models/associations');
+const { User, Customer, ParkingSystem, Project, Car, PalletAllotment, Request, Operator } = require('../models/associations');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -64,7 +64,7 @@ const createCustomer = async (customerData) => {
 
   // Step 4: Get IST time for CreatedAt and UpdatedAt
   const istTime = getISTTime();
-
+  
   // Step 5: Create customer record
   const customer = await Customer.create({
     UserId: userId,
@@ -92,14 +92,14 @@ const createCustomer = async (customerData) => {
       updatedAt: user.UpdatedAt
     },
     customer: {
-      id: customer.Id,
+    id: customer.Id,
       userId: customer.UserId,
-      firstName: customer.FirstName,
-      lastName: customer.LastName,
-      email: customer.Email,
-      mobileNumber: customer.MobileNumber,
+    firstName: customer.FirstName,
+    lastName: customer.LastName,
+    email: customer.Email,
+    mobileNumber: customer.MobileNumber,
       projectId: customer.ProjectId,
-      parkingSystemId: customer.ParkingSystemId,
+    parkingSystemId: customer.ParkingSystemId,
       flatNumber: customer.FlatNumber,
       profession: customer.Profession,
       status: customer.Status,
@@ -154,7 +154,7 @@ const getCustomerProfile = async (userId) => {
       lastName: customer.LastName,
       email: customer.Email,
       mobileNumber: customer.MobileNumber,
-      projectId: customer.ProjectId,
+    projectId: customer.ProjectId,
       project: customer.project ? {
         id: customer.project.Id,
         projectName: customer.project.ProjectName,
@@ -168,13 +168,13 @@ const getCustomerProfile = async (userId) => {
         level: customer.parkingSystem.Level,
         column: customer.parkingSystem.Column
       } : null,
-      flatNumber: customer.FlatNumber,
-      profession: customer.Profession,
-      status: customer.Status,
+    flatNumber: customer.FlatNumber,
+    profession: customer.Profession,
+    status: customer.Status,
       approvedBy: customer.ApprovedBy,
       approvedAt: customer.ApprovedAt,
-      createdAt: customer.CreatedAt,
-      updatedAt: customer.UpdatedAt
+    createdAt: customer.CreatedAt,
+    updatedAt: customer.UpdatedAt
     }
   };
 };
@@ -301,11 +301,285 @@ const getCustomerPalletStatus = async (userId) => {
   }));
 };
 
+// Request Car Release Service
+const requestCarRelease = async (userId, palletId) => {
+  // Step 1: Find the pallet assigned to the customer
+  const pallet = await PalletAllotment.findOne({
+    where: {
+      Id: palletId,
+      UserId: userId,
+      Status: 'Assigned'
+    },
+    include: [
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column', 'TimeForEachLevel', 'TimeForHorizontalMove', 'ProjectId']
+      },
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+      }
+    ]
+  });
+
+  if (!pallet) {
+    throw new Error('Pallet not found or not assigned to you');
+  }
+
+  // Step 2: Check if there's already a pending request for this pallet
+  const existingRequest = await Request.findOne({
+    where: {
+      PalletAllotmentId: palletId,
+      UserId: userId,
+      Status: ['Pending', 'Accepted', 'Started']
+    }
+  });
+
+  if (existingRequest) {
+    throw new Error('A request for this pallet is already pending or in progress');
+  }
+
+  // Step 3: Find operator assigned to this parking system
+  const operator = await Operator.findOne({
+    where: {
+      ParkingSystemId: pallet.ParkingSystemId,
+      ProjectId: pallet.ProjectId,
+      Status: 'Approved'
+    },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username']
+      }
+    ]
+  });
+
+  if (!operator) {
+    throw new Error('No operator assigned to this parking system. Please contact administrator');
+  }
+
+  // Step 4: Calculate estimated time to bring down the car
+  // Estimated time = (Level * TimeForEachLevel) + TimeForHorizontalMove
+  // Level is the pallet's level, TimeForEachLevel is from parking system
+  const estimatedTime = (pallet.Level * pallet.parkingSystem.TimeForEachLevel) + pallet.parkingSystem.TimeForHorizontalMove;
+
+  // Step 5: Create request entry
+  const istTime = getISTTime();
+
+  const request = await Request.create({
+    UserId: userId,
+    PalletAllotmentId: palletId,
+    OperatorId: operator.Id,
+    Status: 'Pending',
+    EstimatedTime: estimatedTime,
+    CreatedAt: istTime,
+    UpdatedAt: istTime
+  });
+
+  // Step 6: Reload request with associations
+  await request.reload({
+    include: [
+      {
+        model: Operator,
+        as: 'operator',
+        attributes: ['Id'],
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['Id', 'Username']
+          }
+        ]
+      },
+      {
+        model: PalletAllotment,
+        as: 'palletAllotment',
+        attributes: ['Id', 'Level', 'Column', 'UserGivenPalletNumber'],
+        include: [
+          {
+            model: ParkingSystem,
+            as: 'parkingSystem',
+            attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+          },
+          {
+            model: Project,
+            as: 'project',
+            attributes: ['Id', 'ProjectName', 'SocietyName']
+          }
+        ]
+      }
+    ]
+  });
+
+  return {
+    request: {
+      id: request.Id,
+      userId: request.UserId,
+      palletAllotmentId: request.PalletAllotmentId,
+      operatorId: request.OperatorId,
+      operator: request.operator ? {
+        id: request.operator.Id,
+        user: request.operator.user ? {
+          id: request.operator.user.Id,
+          username: request.operator.user.Username
+        } : null
+      } : null,
+      status: request.Status,
+      estimatedTime: request.EstimatedTime,
+      estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
+      createdAt: request.CreatedAt,
+      updatedAt: request.UpdatedAt
+    },
+    pallet: {
+      id: pallet.Id,
+      level: pallet.Level,
+      column: pallet.Column,
+      userGivenPalletNumber: pallet.UserGivenPalletNumber,
+      parkingSystem: pallet.parkingSystem ? {
+        id: pallet.parkingSystem.Id,
+        wingName: pallet.parkingSystem.WingName,
+        type: pallet.parkingSystem.Type,
+        level: pallet.parkingSystem.Level,
+        column: pallet.parkingSystem.Column,
+        timeForEachLevel: pallet.parkingSystem.TimeForEachLevel,
+        timeForHorizontalMove: pallet.parkingSystem.TimeForHorizontalMove
+      } : null,
+      project: pallet.project ? {
+        id: pallet.project.Id,
+        projectName: pallet.project.ProjectName,
+        societyName: pallet.project.SocietyName
+      } : null,
+      car: pallet.car ? {
+        id: pallet.car.Id,
+        carType: pallet.car.CarType,
+        carModel: pallet.car.CarModel,
+        carCompany: pallet.car.CarCompany,
+        carNumber: pallet.car.CarNumber
+      } : null
+    },
+    message: 'Car release request submitted successfully. Waiting for operator approval.'
+  };
+};
+
+// Get Customer Requests Service
+const getCustomerRequests = async (userId) => {
+  // Find all requests created by the customer
+  const requests = await Request.findAll({
+    where: {
+      UserId: userId
+    },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      },
+      {
+        model: PalletAllotment,
+        as: 'palletAllotment',
+        attributes: ['Id', 'Level', 'Column', 'UserGivenPalletNumber', 'Status'],
+        include: [
+          {
+            model: Car,
+            as: 'car',
+            attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber'],
+            required: false
+          },
+          {
+            model: ParkingSystem,
+            as: 'parkingSystem',
+            attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+          },
+          {
+            model: Project,
+            as: 'project',
+            attributes: ['Id', 'ProjectName', 'SocietyName']
+          }
+        ]
+      },
+      {
+        model: Operator,
+        as: 'operator',
+        attributes: ['Id'],
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['Id', 'Username']
+          }
+        ],
+        required: false
+      }
+    ],
+    order: [['CreatedAt', 'DESC']] // Order by creation date descending (newest first)
+  });
+
+  return requests.map(request => ({
+    id: request.Id,
+    userId: request.UserId,
+    customer: request.user ? {
+      id: request.user.Id,
+      username: request.user.Username,
+      role: request.user.Role
+    } : null,
+    palletAllotmentId: request.PalletAllotmentId,
+    pallet: request.palletAllotment ? {
+      id: request.palletAllotment.Id,
+      level: request.palletAllotment.Level,
+      column: request.palletAllotment.Column,
+      userGivenPalletNumber: request.palletAllotment.UserGivenPalletNumber,
+      status: request.palletAllotment.Status,
+      car: request.palletAllotment.car ? {
+        id: request.palletAllotment.car.Id,
+        carType: request.palletAllotment.car.CarType,
+        carModel: request.palletAllotment.car.CarModel,
+        carCompany: request.palletAllotment.car.CarCompany,
+        carNumber: request.palletAllotment.car.CarNumber
+      } : null,
+      parkingSystem: request.palletAllotment.parkingSystem ? {
+        id: request.palletAllotment.parkingSystem.Id,
+        wingName: request.palletAllotment.parkingSystem.WingName,
+        type: request.palletAllotment.parkingSystem.Type,
+        level: request.palletAllotment.parkingSystem.Level,
+        column: request.palletAllotment.parkingSystem.Column
+      } : null,
+      project: request.palletAllotment.project ? {
+        id: request.palletAllotment.project.Id,
+        projectName: request.palletAllotment.project.ProjectName,
+        societyName: request.palletAllotment.project.SocietyName
+      } : null
+    } : null,
+    operatorId: request.OperatorId,
+    operator: request.operator ? {
+      id: request.operator.Id,
+      user: request.operator.user ? {
+        id: request.operator.user.Id,
+        username: request.operator.user.Username
+      } : null
+    } : null,
+    status: request.Status,
+    estimatedTime: request.EstimatedTime,
+    estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
+    createdAt: request.CreatedAt,
+    updatedAt: request.UpdatedAt
+  }));
+};
+
 module.exports = {
   createCustomer,
   getCustomerProfile,
   createCar,
   getCarList,
-  getCustomerPalletStatus
+  getCustomerPalletStatus,
+  requestCarRelease,
+  getCustomerRequests
 };
 

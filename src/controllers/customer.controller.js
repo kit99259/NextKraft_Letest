@@ -96,11 +96,45 @@ const getCustomerPalletStatus = async (req, res) => {
   }
 };
 
+// Request Car Release Controller
+const requestCarRelease = async (req, res) => {
+  try {
+    const { palletId } = req.body;
+    const userId = req.user.id; // Get userId from authenticated session
+    
+    const result = await customerService.requestCarRelease(userId, parseInt(palletId));
+    
+    return successResponse(res, result, 'Car release request submitted successfully');
+  } catch (error) {
+    console.error('Request car release error:', error);
+    const statusCode = error.message === 'Pallet not found or not assigned to you' ||
+                       error.message === 'No operator assigned to this parking system. Please contact administrator' ? 404 :
+                       error.message === 'A request for this pallet is already pending or in progress' ? 400 : 500;
+    return errorResponse(res, error.message || 'Failed to submit car release request', statusCode);
+  }
+};
+
+// Get Customer Requests Controller
+const getCustomerRequests = async (req, res) => {
+  try {
+    const userId = req.user.id; // Get userId from authenticated session
+    
+    const result = await customerService.getCustomerRequests(userId);
+    
+    return successResponse(res, { requests: result, count: result.length }, 'Customer requests retrieved successfully');
+  } catch (error) {
+    console.error('Get customer requests error:', error);
+    return errorResponse(res, error.message || 'Failed to retrieve customer requests', 500);
+  }
+};
+
 module.exports = {
   createCustomer,
   getCustomerProfile,
   createCar,
   getCarList,
-  getCustomerPalletStatus
+  getCustomerPalletStatus,
+  requestCarRelease,
+  getCustomerRequests
 };
 

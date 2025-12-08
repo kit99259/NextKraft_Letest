@@ -4,6 +4,7 @@ const { authenticate } = require('../middleware/auth.middleware');
 const customerController = require('../controllers/customer.controller');
 const { validateCreateCustomer } = require('../validators/customer.validator');
 const { validateCreateCar } = require('../validators/car.validator');
+const { validateRequestCarRelease } = require('../validators/pallet.validator');
 
 /**
  * @swagger
@@ -497,6 +498,286 @@ router.get('/car', authenticate, customerController.getCarList);
  *         description: Unauthorized - Authentication required
  */
 router.get('/pallet-status', authenticate, customerController.getCustomerPalletStatus);
+
+/**
+ * @swagger
+ * /api/customer/release-car-request:
+ *   post:
+ *     summary: Request to release car from pallet (Customer authentication required)
+ *     description: Creates a request to release the customer's car from an assigned pallet. The request will be assigned to the operator for the parking system. Returns estimated time to bring down the car.
+ *     tags: [Customer]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - palletId
+ *             properties:
+ *               palletId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: ID of the pallet to release the car from
+ *                 example: 1
+ *     responses:
+ *       200:
+ *         description: Car release request submitted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     request:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         userId:
+ *                           type: integer
+ *                         palletAllotmentId:
+ *                           type: integer
+ *                         operatorId:
+ *                           type: integer
+ *                         operator:
+ *                           type: object
+ *                           nullable: true
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             user:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 username:
+ *                                   type: string
+ *                         status:
+ *                           type: string
+ *                           enum: [Pending, Accepted, Started, Completed, Cancelled]
+ *                         estimatedTime:
+ *                           type: integer
+ *                           description: Estimated time in seconds
+ *                         estimatedTimeFormatted:
+ *                           type: string
+ *                           description: Estimated time in human-readable format
+ *                           example: "5 minutes 30 seconds"
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *                     pallet:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         level:
+ *                           type: integer
+ *                         column:
+ *                           type: integer
+ *                         userGivenPalletNumber:
+ *                           type: string
+ *                         parkingSystem:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             wingName:
+ *                               type: string
+ *                             type:
+ *                               type: string
+ *                               enum: [Tower, Puzzle]
+ *                             level:
+ *                               type: integer
+ *                             column:
+ *                               type: integer
+ *                             timeForEachLevel:
+ *                               type: integer
+ *                             timeForHorizontalMove:
+ *                               type: integer
+ *                         project:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             projectName:
+ *                               type: string
+ *                             societyName:
+ *                               type: string
+ *                         car:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             carType:
+ *                               type: string
+ *                             carModel:
+ *                               type: string
+ *                             carCompany:
+ *                               type: string
+ *                             carNumber:
+ *                               type: string
+ *                     message:
+ *                       type: string
+ *       400:
+ *         description: Validation error or request already exists for this pallet
+ *       401:
+ *         description: Unauthorized - Authentication required
+ *       404:
+ *         description: Pallet not found or not assigned to customer, or no operator assigned
+ */
+router.post('/release-car-request', authenticate, validateRequestCarRelease, customerController.requestCarRelease);
+
+/**
+ * @swagger
+ * /api/customer/requests:
+ *   get:
+ *     summary: Get list of requests created by current customer (Customer authentication required)
+ *     description: Returns all requests created by the authenticated customer, ordered by creation date (newest first).
+ *     tags: [Customer]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Customer requests retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     requests:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           userId:
+ *                             type: integer
+ *                           customer:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               username:
+ *                                 type: string
+ *                               role:
+ *                                 type: string
+ *                           palletAllotmentId:
+ *                             type: integer
+ *                           pallet:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               level:
+ *                                 type: integer
+ *                               column:
+ *                                 type: integer
+ *                               userGivenPalletNumber:
+ *                                 type: string
+ *                               status:
+ *                                 type: string
+ *                                 enum: [Assigned, Released]
+ *                               car:
+ *                                 type: object
+ *                                 nullable: true
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   carType:
+ *                                     type: string
+ *                                   carModel:
+ *                                     type: string
+ *                                   carCompany:
+ *                                     type: string
+ *                                   carNumber:
+ *                                     type: string
+ *                               parkingSystem:
+ *                                 type: object
+ *                                 nullable: true
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   wingName:
+ *                                     type: string
+ *                                   type:
+ *                                     type: string
+ *                                     enum: [Tower, Puzzle]
+ *                                   level:
+ *                                     type: integer
+ *                                   column:
+ *                                     type: integer
+ *                               project:
+ *                                 type: object
+ *                                 nullable: true
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   projectName:
+ *                                     type: string
+ *                                   societyName:
+ *                                     type: string
+ *                           operatorId:
+ *                             type: integer
+ *                             nullable: true
+ *                           operator:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               user:
+ *                                 type: object
+ *                                 nullable: true
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   username:
+ *                                     type: string
+ *                           status:
+ *                             type: string
+ *                             enum: [Pending, Accepted, Started, Completed, Cancelled]
+ *                           estimatedTime:
+ *                             type: integer
+ *                             description: Estimated time in seconds
+ *                           estimatedTimeFormatted:
+ *                             type: string
+ *                             description: Estimated time in human-readable format
+ *                             example: "5 minutes 30 seconds"
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of requests
+ *       401:
+ *         description: Unauthorized - Authentication required
+ */
+router.get('/requests', authenticate, customerController.getCustomerRequests);
 
 module.exports = router;
 

@@ -104,11 +104,51 @@ const assignPalletToCustomer = async (req, res) => {
   }
 };
 
+// Get Operator Requests Controller
+const getOperatorRequests = async (req, res) => {
+  try {
+    const operatorUserId = req.user.id; // Get operator userId from authenticated session
+    
+    const result = await operatorService.getOperatorRequests(operatorUserId);
+    
+    return successResponse(res, { requests: result, count: result.length }, 'Operator requests retrieved successfully');
+  } catch (error) {
+    console.error('Get operator requests error:', error);
+    const statusCode = error.message === 'Operator profile not found' ? 404 : 500;
+    return errorResponse(res, error.message || 'Failed to retrieve operator requests', statusCode);
+  }
+};
+
+// Update Request Status Controller
+const updateRequestStatus = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { status } = req.body;
+    const operatorUserId = req.user.id; // Get operator userId from authenticated session
+    
+    const result = await operatorService.updateRequestStatus(
+      operatorUserId,
+      parseInt(requestId),
+      status
+    );
+    
+    return successResponse(res, result, result.message);
+  } catch (error) {
+    console.error('Update request status error:', error);
+    const statusCode = error.message === 'Operator profile not found' ||
+                       error.message === 'Request not found or not assigned to you' ? 404 :
+                       error.message.includes('Invalid status transition') ? 400 : 500;
+    return errorResponse(res, error.message || 'Failed to update request status', statusCode);
+  }
+};
+
 module.exports = {
   createOperator,
   getOperatorProfile,
   getOperatorList,
   getOperatorProjectWithParkingSystems,
-  assignPalletToCustomer
+  assignPalletToCustomer,
+  getOperatorRequests,
+  updateRequestStatus
 };
 

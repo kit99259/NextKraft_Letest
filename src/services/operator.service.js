@@ -1,4 +1,4 @@
-const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car } = require('../models/associations');
+const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request } = require('../models/associations');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -499,11 +499,311 @@ const assignPalletToCustomer = async (operatorUserId, palletId, customerId, carI
   };
 };
 
+// Get Operator Requests Service
+const getOperatorRequests = async (operatorUserId) => {
+  // Step 1: Find operator by userId
+  const operator = await Operator.findOne({
+    where: { UserId: operatorUserId }
+  });
+
+  if (!operator) {
+    throw new Error('Operator profile not found');
+  }
+
+  // Step 2: Find all requests assigned to this operator
+  const requests = await Request.findAll({
+    where: {
+      OperatorId: operator.Id
+    },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      },
+      {
+        model: PalletAllotment,
+        as: 'palletAllotment',
+        attributes: ['Id', 'Level', 'Column', 'UserGivenPalletNumber', 'Status'],
+        include: [
+          {
+            model: Car,
+            as: 'car',
+            attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber'],
+            include: [
+              {
+                model: User,
+                as: 'user',
+                attributes: ['Id', 'Username']
+              }
+            ]
+          },
+          {
+            model: ParkingSystem,
+            as: 'parkingSystem',
+            attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+          },
+          {
+            model: Project,
+            as: 'project',
+            attributes: ['Id', 'ProjectName', 'SocietyName']
+          }
+        ]
+      },
+      {
+        model: Operator,
+        as: 'operator',
+        attributes: ['Id'],
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['Id', 'Username']
+          }
+        ]
+      }
+    ],
+    order: [
+      ['Status', 'ASC'], // Order by status: Pending first, then Accepted, Started, Completed, Cancelled
+      ['CreatedAt', 'DESC'] // Then by creation date (newest first)
+    ]
+  });
+
+  return requests.map(request => ({
+    id: request.Id,
+    userId: request.UserId,
+    customer: request.user ? {
+      id: request.user.Id,
+      username: request.user.Username,
+      role: request.user.Role
+    } : null,
+    palletAllotmentId: request.PalletAllotmentId,
+    pallet: request.palletAllotment ? {
+      id: request.palletAllotment.Id,
+      level: request.palletAllotment.Level,
+      column: request.palletAllotment.Column,
+      userGivenPalletNumber: request.palletAllotment.UserGivenPalletNumber,
+      status: request.palletAllotment.Status,
+      car: request.palletAllotment.car ? {
+        id: request.palletAllotment.car.Id,
+        carType: request.palletAllotment.car.CarType,
+        carModel: request.palletAllotment.car.CarModel,
+        carCompany: request.palletAllotment.car.CarCompany,
+        carNumber: request.palletAllotment.car.CarNumber,
+        user: request.palletAllotment.car.user ? {
+          id: request.palletAllotment.car.user.Id,
+          username: request.palletAllotment.car.user.Username
+        } : null
+      } : null,
+      parkingSystem: request.palletAllotment.parkingSystem ? {
+        id: request.palletAllotment.parkingSystem.Id,
+        wingName: request.palletAllotment.parkingSystem.WingName,
+        type: request.palletAllotment.parkingSystem.Type,
+        level: request.palletAllotment.parkingSystem.Level,
+        column: request.palletAllotment.parkingSystem.Column
+      } : null,
+      project: request.palletAllotment.project ? {
+        id: request.palletAllotment.project.Id,
+        projectName: request.palletAllotment.project.ProjectName,
+        societyName: request.palletAllotment.project.SocietyName
+      } : null
+    } : null,
+    operatorId: request.OperatorId,
+    operator: request.operator ? {
+      id: request.operator.Id,
+      user: request.operator.user ? {
+        id: request.operator.user.Id,
+        username: request.operator.user.Username
+      } : null
+    } : null,
+    status: request.Status,
+    estimatedTime: request.EstimatedTime,
+    estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
+    createdAt: request.CreatedAt,
+    updatedAt: request.UpdatedAt
+  }));
+};
+
+// Update Request Status Service
+const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
+  // Step 1: Find operator by userId
+  const operator = await Operator.findOne({
+    where: { UserId: operatorUserId }
+  });
+
+  if (!operator) {
+    throw new Error('Operator profile not found');
+  }
+
+  // Step 2: Find the request
+  const request = await Request.findOne({
+    where: {
+      Id: requestId,
+      OperatorId: operator.Id
+    },
+    include: [
+      {
+        model: PalletAllotment,
+        as: 'palletAllotment',
+        attributes: ['Id', 'UserId', 'CarId', 'Status', 'Level', 'Column', 'UserGivenPalletNumber']
+      },
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      }
+    ]
+  });
+
+  if (!request) {
+    throw new Error('Request not found or not assigned to you');
+  }
+
+  // Step 3: Validate status transition
+  const validTransitions = {
+    'Pending': ['Accepted', 'Cancelled'],
+    'Accepted': ['Started', 'Cancelled'],
+    'Started': ['Completed', 'Cancelled'],
+    'Completed': [], // Cannot change from Completed
+    'Cancelled': [] // Cannot change from Cancelled
+  };
+
+  if (!validTransitions[request.Status] || !validTransitions[request.Status].includes(newStatus)) {
+    throw new Error(`Invalid status transition from ${request.Status} to ${newStatus}`);
+  }
+
+  // Step 4: Update request status
+  const istTime = getISTTime();
+
+  await request.update({
+    Status: newStatus,
+    UpdatedAt: istTime
+  });
+
+  // Step 5: If status is "Completed", release the pallet
+  if (newStatus === 'Completed' && request.palletAllotment) {
+    const pallet = request.palletAllotment;
+    
+    // Release the pallet: set UserId to 0, CarId to null, Status to 'Released'
+    await pallet.update({
+      UserId: 0,
+      CarId: null,
+      Status: 'Released',
+      UpdatedAt: istTime
+    });
+  }
+
+  // Step 6: Reload request with all associations
+  await request.reload({
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      },
+      {
+        model: PalletAllotment,
+        as: 'palletAllotment',
+        attributes: ['Id', 'UserId', 'CarId', 'Status', 'Level', 'Column', 'UserGivenPalletNumber'],
+        include: [
+          {
+            model: Car,
+            as: 'car',
+            attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber'],
+            required: false
+          },
+          {
+            model: ParkingSystem,
+            as: 'parkingSystem',
+            attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+          },
+          {
+            model: Project,
+            as: 'project',
+            attributes: ['Id', 'ProjectName', 'SocietyName']
+          }
+        ]
+      },
+      {
+        model: Operator,
+        as: 'operator',
+        attributes: ['Id'],
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['Id', 'Username']
+          }
+        ]
+      }
+    ]
+  });
+
+  return {
+    request: {
+      id: request.Id,
+      userId: request.UserId,
+      customer: request.user ? {
+        id: request.user.Id,
+        username: request.user.Username,
+        role: request.user.Role
+      } : null,
+      palletAllotmentId: request.PalletAllotmentId,
+      pallet: request.palletAllotment ? {
+        id: request.palletAllotment.Id,
+        userId: request.palletAllotment.UserId,
+        carId: request.palletAllotment.CarId,
+        level: request.palletAllotment.Level,
+        column: request.palletAllotment.Column,
+        userGivenPalletNumber: request.palletAllotment.UserGivenPalletNumber,
+        status: request.palletAllotment.Status,
+        car: request.palletAllotment.car ? {
+          id: request.palletAllotment.car.Id,
+          carType: request.palletAllotment.car.CarType,
+          carModel: request.palletAllotment.car.CarModel,
+          carCompany: request.palletAllotment.car.CarCompany,
+          carNumber: request.palletAllotment.car.CarNumber
+        } : null,
+        parkingSystem: request.palletAllotment.parkingSystem ? {
+          id: request.palletAllotment.parkingSystem.Id,
+          wingName: request.palletAllotment.parkingSystem.WingName,
+          type: request.palletAllotment.parkingSystem.Type,
+          level: request.palletAllotment.parkingSystem.Level,
+          column: request.palletAllotment.parkingSystem.Column
+        } : null,
+        project: request.palletAllotment.project ? {
+          id: request.palletAllotment.project.Id,
+          projectName: request.palletAllotment.project.ProjectName,
+          societyName: request.palletAllotment.project.SocietyName
+        } : null
+      } : null,
+      operatorId: request.OperatorId,
+      operator: request.operator ? {
+        id: request.operator.Id,
+        user: request.operator.user ? {
+          id: request.operator.user.Id,
+          username: request.operator.user.Username
+        } : null
+      } : null,
+      status: request.Status,
+      estimatedTime: request.EstimatedTime,
+      estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
+      createdAt: request.CreatedAt,
+      updatedAt: request.UpdatedAt
+    },
+    message: newStatus === 'Completed' 
+      ? 'Request completed successfully. Pallet has been released.' 
+      : `Request status updated to ${newStatus} successfully.`
+  };
+};
+
 module.exports = {
   createOperator,
   getOperatorProfile,
   getOperatorList,
   getOperatorProjectWithParkingSystems,
-  assignPalletToCustomer
+  assignPalletToCustomer,
+  getOperatorRequests,
+  updateRequestStatus
 };
 
