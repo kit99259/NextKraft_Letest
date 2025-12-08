@@ -138,5 +138,86 @@ router.use(authorize('admin'));
  */
 router.post('/create-parking-system', validateCreateParkingSystem, parkingSystemController.createParkingSystem);
 
+/**
+ * @swagger
+ * /api/admin/projects:
+ *   get:
+ *     summary: Get list of all projects with their parking systems (Admin only)
+ *     description: Returns a list of all projects with their basic parking system details. Pallet details are excluded.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Project list with parking systems retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     projects:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           projectName:
+ *                             type: string
+ *                           societyName:
+ *                             type: string
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
+ *                           parkingSystems:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 wingName:
+ *                                   type: string
+ *                                 projectId:
+ *                                   type: integer
+ *                                 type:
+ *                                   type: string
+ *                                   enum: [Tower, Puzzle]
+ *                                 level:
+ *                                   type: integer
+ *                                 column:
+ *                                   type: integer
+ *                                 totalNumberOfPallet:
+ *                                   type: integer
+ *                                 timeForEachLevel:
+ *                                   type: integer
+ *                                 timeForHorizontalMove:
+ *                                   type: integer
+ *                                 createdAt:
+ *                                   type: string
+ *                                   format: date-time
+ *                                 updatedAt:
+ *                                   type: string
+ *                                   format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of projects
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ */
+router.get('/projects', parkingSystemController.getProjectListWithParkingSystems);
+
 module.exports = router;
 

@@ -25,7 +25,20 @@ const createParkingSystem = async (req, res) => {
   }
 };
 
+// Get Project List with Parking Systems Controller (Admin only)
+const getProjectListWithParkingSystems = async (req, res) => {
+  try {
+    const result = await parkingSystemService.getProjectListWithParkingSystems();
+    
+    return successResponse(res, { projects: result, count: result.length }, 'Project list with parking systems retrieved successfully');
+  } catch (error) {
+    console.error('Get project list error:', error);
+    return errorResponse(res, error.message || 'Failed to retrieve project list', 500);
+  }
+};
+
 module.exports = {
-  createParkingSystem
+  createParkingSystem,
+  getProjectListWithParkingSystems
 };
 

@@ -104,7 +104,56 @@ const createParkingSystem = async (parkingSystemData) => {
   };
 };
 
+// Get Project List with Parking Systems Service (Admin only)
+const getProjectListWithParkingSystems = async () => {
+  // Find all projects with their parking systems (without pallet details)
+  const projects = await Project.findAll({
+    include: [
+      {
+        model: ParkingSystem,
+        as: 'parkingSystems',
+        attributes: [
+          'Id',
+          'WingName',
+          'ProjectId',
+          'Type',
+          'Level',
+          'Column',
+          'TotalNumberOfPallet',
+          'TimeForEachLevel',
+          'TimeForHorizontalMove',
+          'CreatedAt',
+          'UpdatedAt'
+        ]
+      }
+    ],
+    order: [['CreatedAt', 'DESC']]
+  });
+
+  return projects.map(project => ({
+    id: project.Id,
+    projectName: project.ProjectName,
+    societyName: project.SocietyName,
+    createdAt: project.CreatedAt,
+    updatedAt: project.UpdatedAt,
+    parkingSystems: project.parkingSystems ? project.parkingSystems.map(parkingSystem => ({
+      id: parkingSystem.Id,
+      wingName: parkingSystem.WingName,
+      projectId: parkingSystem.ProjectId,
+      type: parkingSystem.Type,
+      level: parkingSystem.Level,
+      column: parkingSystem.Column,
+      totalNumberOfPallet: parkingSystem.TotalNumberOfPallet,
+      timeForEachLevel: parkingSystem.TimeForEachLevel,
+      timeForHorizontalMove: parkingSystem.TimeForHorizontalMove,
+      createdAt: parkingSystem.CreatedAt,
+      updatedAt: parkingSystem.UpdatedAt
+    })) : []
+  }));
+};
+
 module.exports = {
-  createParkingSystem
+  createParkingSystem,
+  getProjectListWithParkingSystems
 };
 
