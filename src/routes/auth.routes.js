@@ -64,6 +64,7 @@ router.post('/signup', validateSignUp, authController.signUp);
  *   post:
  *     summary: Login user (Available for all roles: admin, operator, customer)
  *     tags: [Authentication]
+ *     security: []  # Add this line to override global security requirement
  *     requestBody:
  *       required: true
  *       content:
