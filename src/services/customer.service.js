@@ -1,4 +1,4 @@
-const { User, Customer, ParkingSystem, Project } = require('../models/associations');
+const { User, Customer, ParkingSystem, Project, Car } = require('../models/associations');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -179,8 +179,58 @@ const getCustomerProfile = async (userId) => {
   };
 };
 
+// Create Car Service
+const createCar = async (carData) => {
+  // Get IST time for CreatedAt and UpdatedAt
+  const istTime = getISTTime();
+
+  // Create new car
+  const car = await Car.create({
+    UserId: carData.UserId,
+    CarType: carData.CarType,
+    CarModel: carData.CarModel,
+    CarCompany: carData.CarCompany,
+    CarNumber: carData.CarNumber,
+    CreatedAt: istTime,
+    UpdatedAt: istTime
+  });
+
+  return {
+    id: car.Id,
+    userId: car.UserId,
+    carType: car.CarType,
+    carModel: car.CarModel,
+    carCompany: car.CarCompany,
+    carNumber: car.CarNumber,
+    createdAt: car.CreatedAt,
+    updatedAt: car.UpdatedAt
+  };
+};
+
+// Get Car List Service
+const getCarList = async (userId) => {
+  // Find all cars for the user
+  const cars = await Car.findAll({
+    where: { UserId: userId },
+    order: [['CreatedAt', 'DESC']]
+  });
+
+  return cars.map(car => ({
+    id: car.Id,
+    userId: car.UserId,
+    carType: car.CarType,
+    carModel: car.CarModel,
+    carCompany: car.CarCompany,
+    carNumber: car.CarNumber,
+    createdAt: car.CreatedAt,
+    updatedAt: car.UpdatedAt
+  }));
+};
+
 module.exports = {
   createCustomer,
-  getCustomerProfile
+  getCustomerProfile,
+  createCar,
+  getCarList
 };
 

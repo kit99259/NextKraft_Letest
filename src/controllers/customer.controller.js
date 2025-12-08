@@ -47,8 +47,45 @@ const getCustomerProfile = async (req, res) => {
   }
 };
 
+// Create Car Controller
+const createCar = async (req, res) => {
+  try {
+    const { carType, carModel, carCompany, carNumber } = req.body;
+    const userId = req.user.id; // Get userId from authenticated session
+    
+    const result = await customerService.createCar({
+      UserId: userId,
+      CarType: carType,
+      CarModel: carModel,
+      CarCompany: carCompany,
+      CarNumber: carNumber
+    });
+    
+    return successResponse(res, result, 'Car added successfully', 201);
+  } catch (error) {
+    console.error('Create car error:', error);
+    return errorResponse(res, error.message || 'Failed to add car', 500);
+  }
+};
+
+// Get Car List Controller
+const getCarList = async (req, res) => {
+  try {
+    const userId = req.user.id; // Get userId from authenticated session
+    
+    const result = await customerService.getCarList(userId);
+    
+    return successResponse(res, { cars: result, count: result.length }, 'Car list retrieved successfully');
+  } catch (error) {
+    console.error('Get car list error:', error);
+    return errorResponse(res, error.message || 'Failed to retrieve car list', 500);
+  }
+};
+
 module.exports = {
   createCustomer,
-  getCustomerProfile
+  getCustomerProfile,
+  createCar,
+  getCarList
 };
 

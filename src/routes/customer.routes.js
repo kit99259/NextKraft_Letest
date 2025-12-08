@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth.middleware');
 const customerController = require('../controllers/customer.controller');
 const { validateCreateCustomer } = require('../validators/customer.validator');
+const { validateCreateCar } = require('../validators/car.validator');
 
 /**
  * @swagger
@@ -258,6 +259,132 @@ router.post('/', validateCreateCustomer, customerController.createCustomer);
  *         description: Customer profile not found
  */
 router.get('/profile', authenticate, customerController.getCustomerProfile);
+
+/**
+ * @swagger
+ * /api/customer/car:
+ *   post:
+ *     summary: Add a new car (Customer authentication required)
+ *     tags: [Customer]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               carType:
+ *                 type: string
+ *                 maxLength: 50
+ *                 example: "Sedan"
+ *               carModel:
+ *                 type: string
+ *                 maxLength: 100
+ *                 example: "Civic"
+ *               carCompany:
+ *                 type: string
+ *                 maxLength: 100
+ *                 example: "Honda"
+ *               carNumber:
+ *                 type: string
+ *                 maxLength: 50
+ *                 example: "MH-01-AB-1234"
+ *     responses:
+ *       201:
+ *         description: Car added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     userId:
+ *                       type: integer
+ *                     carType:
+ *                       type: string
+ *                     carModel:
+ *                       type: string
+ *                     carCompany:
+ *                       type: string
+ *                     carNumber:
+ *                       type: string
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *                     updatedAt:
+ *                       type: string
+ *                       format: date-time
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized - Authentication required
+ */
+router.post('/car', authenticate, validateCreateCar, customerController.createCar);
+
+/**
+ * @swagger
+ * /api/customer/car:
+ *   get:
+ *     summary: Get list of cars for current customer (Customer authentication required)
+ *     description: Returns a list of all cars belonging to the authenticated customer. UserId is extracted from JWT token.
+ *     tags: [Customer]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Car list retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     cars:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           userId:
+ *                             type: integer
+ *                           carType:
+ *                             type: string
+ *                           carModel:
+ *                             type: string
+ *                           carCompany:
+ *                             type: string
+ *                           carNumber:
+ *                             type: string
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of cars
+ *       401:
+ *         description: Unauthorized - Authentication required
+ */
+router.get('/car', authenticate, customerController.getCarList);
 
 module.exports = router;
 
