@@ -7,7 +7,86 @@ const customerController = require('../controllers/customer.controller');
 const { validateCreateParkingSystem } = require('../validators/parkingSystem.validator');
 const { validateUpdatePalletPower } = require('../validators/operator.validator');
 
-// All routes require authentication
+// Public routes (no authentication required)
+/**
+ * @swagger
+ * /api/admin/projects:
+ *   get:
+ *     summary: Get list of all projects with their parking systems (Public - No authentication required)
+ *     description: Returns a list of all projects with their basic parking system details. Pallet details are excluded. This endpoint is publicly accessible.
+ *     tags: [Admin]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Project list with parking systems retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     projects:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           projectName:
+ *                             type: string
+ *                           societyName:
+ *                             type: string
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
+ *                           parkingSystems:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 wingName:
+ *                                   type: string
+ *                                 projectId:
+ *                                   type: integer
+ *                                 type:
+ *                                   type: string
+ *                                   enum: [Tower, Puzzle]
+ *                                 level:
+ *                                   type: integer
+ *                                 column:
+ *                                   type: integer
+ *                                 totalNumberOfPallet:
+ *                                   type: integer
+ *                                 timeForEachLevel:
+ *                                   type: integer
+ *                                 timeForHorizontalMove:
+ *                                   type: integer
+ *                                 createdAt:
+ *                                   type: string
+ *                                   format: date-time
+ *                                 updatedAt:
+ *                                   type: string
+ *                                   format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of projects
+ *       500:
+ *         description: Server error
+ */
+router.get('/projects', parkingSystemController.getProjectListWithParkingSystems);
+
+// All routes below require authentication
 router.use(authenticate);
 
 /**
@@ -262,87 +341,6 @@ router.get('/customers', authorize('admin', 'operator'), customerController.getC
  *         description: Forbidden - Admin access required
  */
 router.post('/create-parking-system', authorize('admin'), validateCreateParkingSystem, parkingSystemController.createParkingSystem);
-
-/**
- * @swagger
- * /api/admin/projects:
- *   get:
- *     summary: Get list of all projects with their parking systems (Admin only)
- *     description: Returns a list of all projects with their basic parking system details. Pallet details are excluded.
- *     tags: [Admin]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Project list with parking systems retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     projects:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           id:
- *                             type: integer
- *                           projectName:
- *                             type: string
- *                           societyName:
- *                             type: string
- *                           createdAt:
- *                             type: string
- *                             format: date-time
- *                           updatedAt:
- *                             type: string
- *                             format: date-time
- *                           parkingSystems:
- *                             type: array
- *                             items:
- *                               type: object
- *                               properties:
- *                                 id:
- *                                   type: integer
- *                                 wingName:
- *                                   type: string
- *                                 projectId:
- *                                   type: integer
- *                                 type:
- *                                   type: string
- *                                   enum: [Tower, Puzzle]
- *                                 level:
- *                                   type: integer
- *                                 column:
- *                                   type: integer
- *                                 totalNumberOfPallet:
- *                                   type: integer
- *                                 timeForEachLevel:
- *                                   type: integer
- *                                 timeForHorizontalMove:
- *                                   type: integer
- *                                 createdAt:
- *                                   type: string
- *                                   format: date-time
- *                                 updatedAt:
- *                                   type: string
- *                                   format: date-time
- *                     count:
- *                       type: integer
- *                       description: Total number of projects
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - Admin access required
- */
-router.get('/projects', authorize('admin'), parkingSystemController.getProjectListWithParkingSystems);
 
 /**
  * @swagger
