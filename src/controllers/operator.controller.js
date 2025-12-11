@@ -142,6 +142,24 @@ const updateRequestStatus = async (req, res) => {
   }
 };
 
+// Update Operator Pallet Power Controller (Admin only)
+const updateOperatorPalletPower = async (req, res) => {
+  try {
+    const { operatorId, hasPalletPower } = req.body;
+    
+    const result = await operatorService.updateOperatorPalletPower(
+      parseInt(operatorId),
+      hasPalletPower
+    );
+    
+    return successResponse(res, result, 'Operator pallet power updated successfully');
+  } catch (error) {
+    console.error('Update operator pallet power error:', error);
+    const statusCode = error.message === 'Operator not found' ? 404 : 500;
+    return errorResponse(res, error.message || 'Failed to update operator pallet power', statusCode);
+  }
+};
+
 module.exports = {
   createOperator,
   getOperatorProfile,
@@ -149,6 +167,7 @@ module.exports = {
   getOperatorProjectWithParkingSystems,
   assignPalletToCustomer,
   getOperatorRequests,
-  updateRequestStatus
+  updateRequestStatus,
+  updateOperatorPalletPower
 };
 

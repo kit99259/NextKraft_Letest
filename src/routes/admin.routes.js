@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const parkingSystemController = require('../controllers/parkingSystem.controller');
+const operatorController = require('../controllers/operator.controller');
 const { validateCreateParkingSystem } = require('../validators/parkingSystem.validator');
+const { validateUpdatePalletPower } = require('../validators/operator.validator');
 
 // All admin routes require authentication and admin role
 router.use(authenticate);
@@ -357,6 +359,133 @@ router.get('/projects', parkingSystemController.getProjectListWithParkingSystems
  *         description: Forbidden - Admin or Operator access required
  */
 router.get('/pallet-details', parkingSystemController.getPalletDetails);
+
+/**
+ * @swagger
+ * /api/admin/update-operator-pallet-power:
+ *   put:
+ *     summary: Update operator's pallet power permission (Admin only)
+ *     description: Updates the HasPalletPower field for an operator to enable or disable their pallet management capabilities.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - operatorId
+ *               - hasPalletPower
+ *             properties:
+ *               operatorId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: The ID of the operator to update
+ *                 example: 1
+ *               hasPalletPower:
+ *                 type: boolean
+ *                 description: Whether the operator should have pallet power permission
+ *                 example: true
+ *     responses:
+ *       200:
+ *         description: Operator pallet power updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     operator:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         userId:
+ *                           type: integer
+ *                         user:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             username:
+ *                               type: string
+ *                             role:
+ *                               type: string
+ *                         firstName:
+ *                           type: string
+ *                         lastName:
+ *                           type: string
+ *                         email:
+ *                           type: string
+ *                         mobileNumber:
+ *                           type: string
+ *                         projectId:
+ *                           type: integer
+ *                         project:
+ *                           type: object
+ *                           nullable: true
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             projectName:
+ *                               type: string
+ *                             societyName:
+ *                               type: string
+ *                         parkingSystemId:
+ *                           type: integer
+ *                           nullable: true
+ *                         parkingSystem:
+ *                           type: object
+ *                           nullable: true
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             wingName:
+ *                               type: string
+ *                             type:
+ *                               type: string
+ *                             level:
+ *                               type: integer
+ *                             column:
+ *                               type: integer
+ *                         status:
+ *                           type: string
+ *                           enum: [Approved, Rejected, Pending]
+ *                         hasPalletPower:
+ *                           type: boolean
+ *                         approvedBy:
+ *                           type: integer
+ *                           nullable: true
+ *                         approvedAt:
+ *                           type: string
+ *                           format: date-time
+ *                           nullable: true
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *       400:
+ *         description: Validation error - Invalid operatorId or hasPalletPower value
+ *       401:
+ *         description: Unauthorized - Authentication required
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       404:
+ *         description: Operator not found
+ *       500:
+ *         description: Server error
+ */
+router.put('/update-operator-pallet-power', validateUpdatePalletPower, operatorController.updateOperatorPalletPower);
 
 module.exports = router;
 

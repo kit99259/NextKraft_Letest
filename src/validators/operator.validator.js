@@ -71,7 +71,25 @@ const validateCreateOperator = [
   handleValidationErrors
 ];
 
+// Update operator pallet power validation rules
+const validateUpdatePalletPower = [
+  body('operatorId')
+    .notEmpty()
+    .withMessage('Operator ID is required')
+    .isInt({ min: 1 })
+    .withMessage('Operator ID must be a valid integer'),
+  
+  body('hasPalletPower')
+    .notEmpty()
+    .withMessage('Has Pallet Power field is required')
+    .isBoolean()
+    .withMessage('Has Pallet Power must be a boolean value (true or false)'),
+  
+  handleValidationErrors
+];
+
 module.exports = {
-  validateCreateOperator
+  validateCreateOperator,
+  validateUpdatePalletPower
 };
 

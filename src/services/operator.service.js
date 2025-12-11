@@ -797,6 +797,82 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
   };
 };
 
+// Update Operator Pallet Power Service (Admin only)
+const updateOperatorPalletPower = async (operatorId, hasPalletPower) => {
+  // Step 1: Find the operator by ID
+  const operator = await Operator.findByPk(operatorId);
+
+  if (!operator) {
+    throw new Error('Operator not found');
+  }
+
+  // Step 2: Get IST time for UpdatedAt
+  const istTime = getISTTime();
+
+  // Step 3: Update the HasPalletPower field
+  await operator.update({
+    HasPalletPower: hasPalletPower,
+    UpdatedAt: istTime
+  });
+
+  // Step 4: Reload operator with associations
+  await operator.reload({
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      },
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      }
+    ]
+  });
+
+  return {
+    operator: {
+      id: operator.Id,
+      userId: operator.UserId,
+      user: {
+        id: operator.user.Id,
+        username: operator.user.Username,
+        role: operator.user.Role
+      },
+      firstName: operator.FirstName,
+      lastName: operator.LastName,
+      email: operator.Email,
+      mobileNumber: operator.MobileNumber,
+      projectId: operator.ProjectId,
+      project: operator.project ? {
+        id: operator.project.Id,
+        projectName: operator.project.ProjectName,
+        societyName: operator.project.SocietyName
+      } : null,
+      parkingSystemId: operator.ParkingSystemId,
+      parkingSystem: operator.parkingSystem ? {
+        id: operator.parkingSystem.Id,
+        wingName: operator.parkingSystem.WingName,
+        type: operator.parkingSystem.Type,
+        level: operator.parkingSystem.Level,
+        column: operator.parkingSystem.Column
+      } : null,
+      status: operator.Status,
+      hasPalletPower: operator.HasPalletPower,
+      approvedBy: operator.ApprovedBy,
+      approvedAt: operator.ApprovedAt,
+      createdAt: operator.CreatedAt,
+      updatedAt: operator.UpdatedAt
+    }
+  };
+};
+
 module.exports = {
   createOperator,
   getOperatorProfile,
@@ -804,6 +880,7 @@ module.exports = {
   getOperatorProjectWithParkingSystems,
   assignPalletToCustomer,
   getOperatorRequests,
-  updateRequestStatus
+  updateRequestStatus,
+  updateOperatorPalletPower
 };
 
