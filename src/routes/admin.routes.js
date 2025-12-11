@@ -3,12 +3,135 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const parkingSystemController = require('../controllers/parkingSystem.controller');
 const operatorController = require('../controllers/operator.controller');
+const customerController = require('../controllers/customer.controller');
 const { validateCreateParkingSystem } = require('../validators/parkingSystem.validator');
 const { validateUpdatePalletPower } = require('../validators/operator.validator');
 
-// All admin routes require authentication and admin role
+// All routes require authentication
 router.use(authenticate);
-router.use(authorize('admin'));
+
+/**
+ * @swagger
+ * /api/admin/customers:
+ *   get:
+ *     summary: Get list of customers (Admin gets all, Operator gets project-specific)
+ *     description: |
+ *       Returns a list of customers based on user role:
+ *       - Admin: Returns all customers from all projects
+ *       - Operator: Returns only customers from the operator's assigned project
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Customer list retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     customers:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           userId:
+ *                             type: integer
+ *                           user:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               username:
+ *                                 type: string
+ *                               role:
+ *                                 type: string
+ *                                 example: "customer"
+ *                               createdAt:
+ *                                 type: string
+ *                                 format: date-time
+ *                               updatedAt:
+ *                                 type: string
+ *                                 format: date-time
+ *                           firstName:
+ *                             type: string
+ *                           lastName:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                           mobileNumber:
+ *                             type: string
+ *                           projectId:
+ *                             type: integer
+ *                           project:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               projectName:
+ *                                 type: string
+ *                               societyName:
+ *                                 type: string
+ *                           parkingSystemId:
+ *                             type: integer
+ *                             nullable: true
+ *                           parkingSystem:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               wingName:
+ *                                 type: string
+ *                               type:
+ *                                 type: string
+ *                               level:
+ *                                 type: integer
+ *                               column:
+ *                                 type: integer
+ *                           flatNumber:
+ *                             type: string
+ *                           profession:
+ *                             type: string
+ *                           status:
+ *                             type: string
+ *                             enum: [Approved, Rejected, Pending]
+ *                           approvedBy:
+ *                             type: integer
+ *                             nullable: true
+ *                           approvedAt:
+ *                             type: string
+ *                             format: date-time
+ *                             nullable: true
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of customers
+ *       401:
+ *         description: Unauthorized - Authentication required
+ *       403:
+ *         description: Forbidden - Admin or Operator access required
+ *       404:
+ *         description: Operator profile not found or operator not assigned to any project
+ *       500:
+ *         description: Server error
+ */
+router.get('/customers', authorize('admin', 'operator'), customerController.getCustomerList);
 
 /**
  * @swagger
@@ -138,7 +261,7 @@ router.use(authorize('admin'));
  *       403:
  *         description: Forbidden - Admin access required
  */
-router.post('/create-parking-system', validateCreateParkingSystem, parkingSystemController.createParkingSystem);
+router.post('/create-parking-system', authorize('admin'), validateCreateParkingSystem, parkingSystemController.createParkingSystem);
 
 /**
  * @swagger
@@ -219,7 +342,7 @@ router.post('/create-parking-system', validateCreateParkingSystem, parkingSystem
  *       403:
  *         description: Forbidden - Admin access required
  */
-router.get('/projects', parkingSystemController.getProjectListWithParkingSystems);
+router.get('/projects', authorize('admin'), parkingSystemController.getProjectListWithParkingSystems);
 
 /**
  * @swagger
@@ -358,7 +481,7 @@ router.get('/projects', parkingSystemController.getProjectListWithParkingSystems
  *       403:
  *         description: Forbidden - Admin or Operator access required
  */
-router.get('/pallet-details', parkingSystemController.getPalletDetails);
+router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemController.getPalletDetails);
 
 /**
  * @swagger
@@ -485,7 +608,7 @@ router.get('/pallet-details', parkingSystemController.getPalletDetails);
  *       500:
  *         description: Server error
  */
-router.put('/update-operator-pallet-power', validateUpdatePalletPower, operatorController.updateOperatorPalletPower);
+router.put('/update-operator-pallet-power', authorize('admin'), validateUpdatePalletPower, operatorController.updateOperatorPalletPower);
 
 module.exports = router;
 

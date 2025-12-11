@@ -128,6 +128,23 @@ const getCustomerRequests = async (req, res) => {
   }
 };
 
+// Get Customer List Controller (Admin and Operator)
+const getCustomerList = async (req, res) => {
+  try {
+    const userId = req.user.id; // Get userId from authenticated session
+    const userRole = req.user.role; // Get role from authenticated session
+    
+    const result = await customerService.getCustomerList(userId, userRole);
+    
+    return successResponse(res, { customers: result, count: result.length }, 'Customer list retrieved successfully');
+  } catch (error) {
+    console.error('Get customer list error:', error);
+    const statusCode = error.message === 'Operator profile not found' ||
+                       error.message === 'Operator is not assigned to any project' ? 404 : 500;
+    return errorResponse(res, error.message || 'Failed to retrieve customer list', statusCode);
+  }
+};
+
 module.exports = {
   createCustomer,
   getCustomerProfile,
@@ -135,6 +152,7 @@ module.exports = {
   getCarList,
   getCustomerPalletStatus,
   requestCarRelease,
-  getCustomerRequests
+  getCustomerRequests,
+  getCustomerList
 };
 

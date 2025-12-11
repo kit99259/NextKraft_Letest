@@ -573,6 +573,91 @@ const getCustomerRequests = async (userId) => {
   }));
 };
 
+// Get Customer List Service (Admin and Operator)
+const getCustomerList = async (userId, userRole) => {
+  let whereClause = {};
+
+  // If operator, filter by their project
+  if (userRole === 'operator') {
+    // Find operator by userId
+    const operator = await Operator.findOne({
+      where: { UserId: userId }
+    });
+
+    if (!operator) {
+      throw new Error('Operator profile not found');
+    }
+
+    if (!operator.ProjectId) {
+      throw new Error('Operator is not assigned to any project');
+    }
+
+    // Filter customers by operator's project
+    whereClause.ProjectId = operator.ProjectId;
+  }
+  // If admin, no filtering needed (get all customers)
+
+  // Find customers with associations
+  const customers = await Customer.findAll({
+    where: whereClause,
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role', 'CreatedAt', 'UpdatedAt']
+      },
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      }
+    ],
+    order: [['CreatedAt', 'DESC']]
+  });
+
+  return customers.map(customer => ({
+    id: customer.Id,
+    userId: customer.UserId,
+    user: {
+      id: customer.user.Id,
+      username: customer.user.Username,
+      role: customer.user.Role,
+      createdAt: customer.user.CreatedAt,
+      updatedAt: customer.user.UpdatedAt
+    },
+    firstName: customer.FirstName,
+    lastName: customer.LastName,
+    email: customer.Email,
+    mobileNumber: customer.MobileNumber,
+    projectId: customer.ProjectId,
+    project: customer.project ? {
+      id: customer.project.Id,
+      projectName: customer.project.ProjectName,
+      societyName: customer.project.SocietyName
+    } : null,
+    parkingSystemId: customer.ParkingSystemId,
+    parkingSystem: customer.parkingSystem ? {
+      id: customer.parkingSystem.Id,
+      wingName: customer.parkingSystem.WingName,
+      type: customer.parkingSystem.Type,
+      level: customer.parkingSystem.Level,
+      column: customer.parkingSystem.Column
+    } : null,
+    flatNumber: customer.FlatNumber,
+    profession: customer.Profession,
+    status: customer.Status,
+    approvedBy: customer.ApprovedBy,
+    approvedAt: customer.ApprovedAt,
+    createdAt: customer.CreatedAt,
+    updatedAt: customer.UpdatedAt
+  }));
+};
+
 module.exports = {
   createCustomer,
   getCustomerProfile,
@@ -580,6 +665,7 @@ module.exports = {
   getCarList,
   getCustomerPalletStatus,
   requestCarRelease,
-  getCustomerRequests
+  getCustomerRequests,
+  getCustomerList
 };
 
