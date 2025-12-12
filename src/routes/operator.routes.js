@@ -447,6 +447,116 @@ router.get('/project', authorize('operator'), operatorController.getOperatorProj
 
 /**
  * @swagger
+ * /api/operator/customers-with-cars:
+ *   get:
+ *     summary: Get customers (with cars) for operator's project and parking system (Operator only)
+ *     description: Returns customers filtered to the authenticated operator's project and parking system, including their car details.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Customers retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     customers:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           userId:
+ *                             type: integer
+ *                           user:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               username:
+ *                                 type: string
+ *                               role:
+ *                                 type: string
+ *                               createdAt:
+ *                                 type: string
+ *                                 format: date-time
+ *                               updatedAt:
+ *                                 type: string
+ *                                 format: date-time
+ *                           firstName:
+ *                             type: string
+ *                           lastName:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                           mobileNumber:
+ *                             type: string
+ *                           projectId:
+ *                             type: integer
+ *                           parkingSystemId:
+ *                             type: integer
+ *                           flatNumber:
+ *                             type: string
+ *                           profession:
+ *                             type: string
+ *                           status:
+ *                             type: string
+ *                             enum: [Approved, Rejected, Pending]
+ *                           approvedBy:
+ *                             type: integer
+ *                             nullable: true
+ *                           approvedAt:
+ *                             type: string
+ *                             format: date-time
+ *                             nullable: true
+ *                           cars:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 userId:
+ *                                   type: integer
+ *                                 carType:
+ *                                   type: string
+ *                                 carModel:
+ *                                   type: string
+ *                                 carCompany:
+ *                                   type: string
+ *                                 carNumber:
+ *                                   type: string
+ *                                 createdAt:
+ *                                   type: string
+ *                                   format: date-time
+ *                                 updatedAt:
+ *                                   type: string
+ *                                   format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of customers returned
+ *       401:
+ *         description: Unauthorized - Authentication required
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator profile not found or not assigned to project/parking system
+ */
+router.get('/customers-with-cars', authorize('operator'), operatorController.getOperatorCustomersWithCars);
+
+/**
+ * @swagger
  * /api/operator/pallet-details:
  *   get:
  *     summary: Get all pallet details for a specific project and parking system (Admin and Operator)
