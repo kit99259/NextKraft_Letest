@@ -7,6 +7,7 @@ const Car = require('./Car');
 const PalletAllotment = require('./PalletAllotment');
 const RequestQueue = require('./RequestQueue');
 const Request = require('./Request');
+const ParkingRequest = require('./ParkingRequest');
 
 // User associations
 User.hasMany(Customer, { foreignKey: 'UserId', as: 'customers' });
@@ -46,6 +47,7 @@ ParkingSystem.hasMany(PalletAllotment, { foreignKey: 'ParkingSystemId', as: 'pal
 // Car associations
 Car.belongsTo(User, { foreignKey: 'UserId', as: 'user' });
 Car.hasMany(PalletAllotment, { foreignKey: 'CarId', as: 'palletAllotments' });
+Car.hasMany(ParkingRequest, { foreignKey: 'CarId', as: 'parkingRequests' });
 
 // PalletAllotment associations
 PalletAllotment.belongsTo(Project, { foreignKey: 'ProjectId', as: 'project' });
@@ -53,6 +55,11 @@ PalletAllotment.belongsTo(ParkingSystem, { foreignKey: 'ParkingSystemId', as: 'p
 PalletAllotment.belongsTo(Car, { foreignKey: 'CarId', as: 'car' });
 PalletAllotment.hasMany(RequestQueue, { foreignKey: 'PalletAllotmentId', as: 'requestQueues' });
 PalletAllotment.hasMany(Request, { foreignKey: 'PalletAllotmentId', as: 'requests' });
+
+// ParkingRequest associations
+ParkingRequest.belongsTo(User, { foreignKey: 'UserId', as: 'user' });
+ParkingRequest.belongsTo(Operator, { foreignKey: 'OperatorId', as: 'operator' });
+ParkingRequest.belongsTo(Car, { foreignKey: 'CarId', as: 'car' });
 
 // RequestQueue associations
 RequestQueue.belongsTo(User, { foreignKey: 'UserId', as: 'user' });
@@ -73,6 +80,7 @@ module.exports = {
   Car,
   PalletAllotment,
   RequestQueue,
-  Request
+  Request,
+  ParkingRequest
 };
 

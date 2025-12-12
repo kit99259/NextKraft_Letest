@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request } = require('../models/associations');
+const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request, RequestQueue } = require('../models/associations');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -681,20 +681,41 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
     UpdatedAt: istTime
   });
 
-  // Step 5: If status is "Completed", release the pallet
-  if (newStatus === 'Completed' && request.palletAllotment) {
-    const pallet = request.palletAllotment;
-    
-    // Release the pallet: set UserId to 0, CarId to null, Status to 'Released'
-    await pallet.update({
-      UserId: 0,
-      CarId: null,
-      Status: 'Released',
+  // Step 5: If status is "Completed", release pallet, move to RequestQueue, then remove request
+  if (newStatus === 'Completed') {
+    if (request.palletAllotment) {
+      const pallet = request.palletAllotment;
+
+      // Release the pallet: set UserId to 0, CarId to null, Status to 'Released'
+      await pallet.update({
+        UserId: 0,
+        CarId: null,
+        Status: 'Released',
+        UpdatedAt: istTime
+      });
+    }
+
+    // Insert into RequestQueue as history
+    await RequestQueue.create({
+      UserId: request.UserId,
+      PalletAllotmentId: request.PalletAllotmentId,
+      OperatorId: request.OperatorId,
+      Status: request.Status,
+      EstimatedTime: request.EstimatedTime,
+      CreatedAt: request.CreatedAt,
       UpdatedAt: istTime
     });
+
+    // Delete original request
+    await request.destroy();
+
+    return {
+      request: null,
+      message: 'Request completed, logged to history, and removed from active requests. Pallet has been released.'
+    };
   }
 
-  // Step 6: Reload request with all associations
+  // Step 6: Reload request with all associations for non-completed statuses
   await request.reload({
     include: [
       {
@@ -792,9 +813,7 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
       createdAt: request.CreatedAt,
       updatedAt: request.UpdatedAt
     },
-    message: newStatus === 'Completed' 
-      ? 'Request completed successfully. Pallet has been released.' 
-      : `Request status updated to ${newStatus} successfully.`
+    message: `Request status updated to ${newStatus} successfully.`
   };
 };
 

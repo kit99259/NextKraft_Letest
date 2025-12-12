@@ -181,6 +181,12 @@ const getCustomerProfile = async (userId) => {
 
 // Create Car Service
 const createCar = async (carData) => {
+  // Enforce unique car number (global uniqueness assumed)
+  const existing = await Car.findOne({ where: { CarNumber: carData.CarNumber } });
+  if (existing) {
+    throw new Error('Car number already exists');
+  }
+
   // Get IST time for CreatedAt and UpdatedAt
   const istTime = getISTTime();
 
