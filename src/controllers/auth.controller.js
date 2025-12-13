@@ -38,30 +38,7 @@ const login = async (req, res) => {
   }
 };
 
-/**
- * Get User Password by Username Controller (Admin Only)
- * Returns user details including password
- */
-const getUserPasswordByUsername = async (req, res) => {
-  try {
-    const { username } = req.params;
-    
-    if (!username) {
-      return errorResponse(res, 'Username is required', 400);
-    }
-    
-    const result = await authService.getUserPasswordByUsername(username);
-    
-    return successResponse(res, { user: result }, 'User password retrieved successfully');
-  } catch (error) {
-    console.error('Get user password error:', error);
-    const statusCode = error.message === 'User not found' ? 404 : 500;
-    return errorResponse(res, error.message || 'Failed to retrieve user password', statusCode);
-  }
-};
-
 module.exports = {
   signUp,
-  login,
-  getUserPasswordByUsername
+  login
 };

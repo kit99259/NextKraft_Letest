@@ -67,31 +67,9 @@ const login = async (username, password) => {
   };
 };
 
-/**
- * Get User Password by Username (Admin Only)
- * Returns user details including hashed password
- */
-const getUserPasswordByUsername = async (username) => {
-  const user = await User.findOne({ where: { Username: username } });
-  
-  if (!user) {
-    throw new Error('User not found');
-  }
-
-  return {
-    id: user.Id,
-    username: user.Username,
-    password: user.Password,
-    role: user.Role,
-    createdAt: user.CreatedAt,
-    updatedAt: user.UpdatedAt
-  };
-};
-
 module.exports = {
   signUp,
-  login,
-  getUserPasswordByUsername
+  login
 };
 
 
