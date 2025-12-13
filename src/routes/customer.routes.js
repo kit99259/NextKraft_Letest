@@ -390,10 +390,65 @@ router.get('/car', authenticate, customerController.getCarList);
 
 /**
  * @swagger
+ * /api/customer/car/available:
+ *   get:
+ *     summary: Get list of available cars for current customer (Customer authentication required)
+ *     description: Returns a list of cars belonging to the authenticated customer that are not currently parked/assigned. UserId is extracted from JWT token. Only cars that are not in PalletAllotment table (not assigned) are returned.
+ *     tags: [Customer]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Available car list retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     cars:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           userId:
+ *                             type: integer
+ *                           carType:
+ *                             type: string
+ *                           carModel:
+ *                             type: string
+ *                           carCompany:
+ *                             type: string
+ *                           carNumber:
+ *                             type: string
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of available cars (not parked)
+ *       401:
+ *         description: Unauthorized - Authentication required
+ */
+router.get('/car/available', authenticate, customerController.getAvailableCarList);
+
+/**
+ * @swagger
  * /api/customer/pallet-status:
  *   get:
  *     summary: Get pallet status for current customer (Customer authentication required)
- *     description: Returns all pallets assigned to the authenticated customer. Returns empty list if no pallets are assigned.
+ *     description: Returns all pallets assigned to the authenticated customer along with the latest non-completed request for each pallet (if any). Returns empty list if no pallets are assigned. The request field will be null if no non-completed request is found for a pallet.
  *     tags: [Customer]
  *     security:
  *       - bearerAuth: []
@@ -486,6 +541,51 @@ router.get('/car', authenticate, customerController.getCarList);
  *                                 type: integer
  *                               totalNumberOfPallet:
  *                                 type: integer
+ *                           request:
+ *                             type: object
+ *                             nullable: true
+ *                             description: Latest non-completed request for this pallet (null if no request found)
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               userId:
+ *                                 type: integer
+ *                               palletAllotmentId:
+ *                                 type: integer
+ *                               operatorId:
+ *                                 type: integer
+ *                                 nullable: true
+ *                               operator:
+ *                                 type: object
+ *                                 nullable: true
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   user:
+ *                                     type: object
+ *                                     nullable: true
+ *                                     properties:
+ *                                       id:
+ *                                         type: integer
+ *                                       username:
+ *                                         type: string
+ *                               status:
+ *                                 type: string
+ *                                 enum: [Pending, Accepted, Started, Cancelled]
+ *                                 description: Request status (Completed requests are excluded)
+ *                               estimatedTime:
+ *                                 type: integer
+ *                                 description: Estimated time in seconds
+ *                               estimatedTimeFormatted:
+ *                                 type: string
+ *                                 description: Estimated time in human-readable format
+ *                                 example: "5 minutes 30 seconds"
+ *                               createdAt:
+ *                                 type: string
+ *                                 format: date-time
+ *                               updatedAt:
+ *                                 type: string
+ *                                 format: date-time
  *                           createdAt:
  *                             type: string
  *                             format: date-time

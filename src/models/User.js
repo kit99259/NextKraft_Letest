@@ -21,6 +21,10 @@ const User = sequelize.define('User', {
     type: DataTypes.ENUM('admin', 'operator', 'customer'),
     allowNull: false
   },
+  FcmToken: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
   CreatedAt: {
     type: DataTypes.DATE,
     allowNull: false,

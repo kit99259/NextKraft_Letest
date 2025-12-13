@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const notificationService = require('./notification.service');
 const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request, RequestQueue } = require('../models/associations');
 
 // Helper function to get IST time
@@ -447,6 +448,24 @@ const assignPalletToCustomer = async (operatorUserId, palletId, customerId, carI
     ]
   });
 
+  // Send notification to customer when pallet is assigned
+  if (customer && customer.user) {
+    const palletInfo = pallet.UserGivenPalletNumber || `Level ${pallet.Level}, Column ${pallet.Column}`;
+    const carInfo = pallet.car ? `${pallet.car.CarCompany} ${pallet.car.CarModel} (${pallet.car.CarNumber})` : 'your car';
+    
+    await notificationService.sendNotificationToUser(
+      customer.UserId,
+      'Pallet Assigned',
+      `A pallet (${palletInfo}) has been assigned to you for ${carInfo}`,
+      {
+        type: 'pallet_assigned',
+        palletId: palletId.toString(),
+        customerId: customerId.toString(),
+        carId: car ? car.Id.toString() : null
+      }
+    );
+  }
+
   return {
     pallet: {
       id: pallet.Id,
@@ -760,6 +779,29 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
       }
     ]
   });
+
+  // Send notification to customer when operator changes request status
+  if (request.user) {
+    const statusMessages = {
+      'Accepted': 'Your car release request has been accepted by the operator',
+      'Started': 'The operator has started processing your car release request',
+      'Completed': 'Your car has been released successfully',
+      'Cancelled': 'Your car release request has been cancelled'
+    };
+
+    const message = statusMessages[newStatus] || `Your car release request status has been updated to ${newStatus}`;
+    
+    await notificationService.sendNotificationToUser(
+      request.user.Id,
+      'Request Status Updated',
+      message,
+      {
+        type: 'request_status_update',
+        requestId: requestId.toString(),
+        status: newStatus
+      }
+    );
+  }
 
   return {
     request: {

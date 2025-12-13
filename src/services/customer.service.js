@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const { User, Customer, ParkingSystem, Project, Car, PalletAllotment, Request, Operator } = require('../models/associations');
 
 // Helper function to get IST time
@@ -233,6 +234,44 @@ const getCarList = async (userId) => {
   }));
 };
 
+// Get Available Car List Service (cars that are not parked/assigned)
+const getAvailableCarList = async (userId) => {
+  // Find all cars for the user
+  const allCars = await Car.findAll({
+    where: { UserId: userId },
+    order: [['CreatedAt', 'DESC']]
+  });
+
+  // Get all carIds that are currently assigned/parked in PalletAllotment for this user
+  const parkedCars = await PalletAllotment.findAll({
+    where: {
+      UserId: userId,
+      Status: 'Assigned'
+    },
+    attributes: ['CarId'],
+    raw: true
+  });
+
+  // Extract carIds that are parked (filter out null carIds)
+  const parkedCarIds = parkedCars
+    .map(p => p.CarId)
+    .filter(carId => carId !== null);
+
+  // Filter out cars that are in the parked list
+  const availableCars = allCars.filter(car => !parkedCarIds.includes(car.Id));
+
+  return availableCars.map(car => ({
+    id: car.Id,
+    userId: car.UserId,
+    carType: car.CarType,
+    carModel: car.CarModel,
+    carCompany: car.CarCompany,
+    carNumber: car.CarNumber,
+    createdAt: car.CreatedAt,
+    updatedAt: car.UpdatedAt
+  }));
+};
+
 // Get Customer Pallet Status Service
 const getCustomerPalletStatus = async (userId) => {
   // Find all pallets assigned to the customer
@@ -268,43 +307,103 @@ const getCustomerPalletStatus = async (userId) => {
     order: [['CreatedAt', 'DESC']]
   });
 
-  return pallets.map(pallet => ({
-    id: pallet.Id,
-    userId: pallet.UserId,
-    projectId: pallet.ProjectId,
-    parkingSystemId: pallet.ParkingSystemId,
-    level: pallet.Level,
-    column: pallet.Column,
-    userGivenPalletNumber: pallet.UserGivenPalletNumber,
-    carId: pallet.CarId,
-    car: pallet.car ? {
-      id: pallet.car.Id,
-      carType: pallet.car.CarType,
-      carModel: pallet.car.CarModel,
-      carCompany: pallet.car.CarCompany,
-      carNumber: pallet.car.CarNumber,
-      user: pallet.car.user ? {
-        id: pallet.car.user.Id,
-        username: pallet.car.user.Username
-      } : null
-    } : null,
-    status: pallet.Status,
-    project: pallet.project ? {
-      id: pallet.project.Id,
-      projectName: pallet.project.ProjectName,
-      societyName: pallet.project.SocietyName
-    } : null,
-    parkingSystem: pallet.parkingSystem ? {
-      id: pallet.parkingSystem.Id,
-      wingName: pallet.parkingSystem.WingName,
-      type: pallet.parkingSystem.Type,
-      level: pallet.parkingSystem.Level,
-      column: pallet.parkingSystem.Column,
-      totalNumberOfPallet: pallet.parkingSystem.TotalNumberOfPallet
-    } : null,
-    createdAt: pallet.CreatedAt,
-    updatedAt: pallet.UpdatedAt
-  }));
+  // Get all pallet IDs
+  const palletIds = pallets.map(pallet => pallet.Id);
+
+  // Get latest request for each pallet (not completed)
+  const requestsMap = new Map();
+  if (palletIds.length > 0) {
+    // Get all requests for these pallets that are not completed, ordered by CreatedAt DESC
+    const allRequests = await Request.findAll({
+      where: {
+        PalletAllotmentId: { [Op.in]: palletIds },
+        Status: { [Op.ne]: 'Completed' }
+      },
+      include: [
+        {
+          model: Operator,
+          as: 'operator',
+          attributes: ['Id'],
+          include: [
+            {
+              model: User,
+              as: 'user',
+              attributes: ['Id', 'Username']
+            }
+          ],
+          required: false
+        }
+      ],
+      order: [['CreatedAt', 'DESC']]
+    });
+
+    // Group by PalletAllotmentId and take the first (latest) one for each pallet
+    allRequests.forEach(request => {
+      if (!requestsMap.has(request.PalletAllotmentId)) {
+        requestsMap.set(request.PalletAllotmentId, request);
+      }
+    });
+  }
+
+  return pallets.map(pallet => {
+    const request = requestsMap.get(pallet.Id);
+    
+    return {
+      id: pallet.Id,
+      userId: pallet.UserId,
+      projectId: pallet.ProjectId,
+      parkingSystemId: pallet.ParkingSystemId,
+      level: pallet.Level,
+      column: pallet.Column,
+      userGivenPalletNumber: pallet.UserGivenPalletNumber,
+      carId: pallet.CarId,
+      car: pallet.car ? {
+        id: pallet.car.Id,
+        carType: pallet.car.CarType,
+        carModel: pallet.car.CarModel,
+        carCompany: pallet.car.CarCompany,
+        carNumber: pallet.car.CarNumber,
+        user: pallet.car.user ? {
+          id: pallet.car.user.Id,
+          username: pallet.car.user.Username
+        } : null
+      } : null,
+      status: pallet.Status,
+      project: pallet.project ? {
+        id: pallet.project.Id,
+        projectName: pallet.project.ProjectName,
+        societyName: pallet.project.SocietyName
+      } : null,
+      parkingSystem: pallet.parkingSystem ? {
+        id: pallet.parkingSystem.Id,
+        wingName: pallet.parkingSystem.WingName,
+        type: pallet.parkingSystem.Type,
+        level: pallet.parkingSystem.Level,
+        column: pallet.parkingSystem.Column,
+        totalNumberOfPallet: pallet.parkingSystem.TotalNumberOfPallet
+      } : null,
+      request: request ? {
+        id: request.Id,
+        userId: request.UserId,
+        palletAllotmentId: request.PalletAllotmentId,
+        operatorId: request.OperatorId,
+        operator: request.operator ? {
+          id: request.operator.Id,
+          user: request.operator.user ? {
+            id: request.operator.user.Id,
+            username: request.operator.user.Username
+          } : null
+        } : null,
+        status: request.Status,
+        estimatedTime: request.EstimatedTime,
+        estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
+        createdAt: request.CreatedAt,
+        updatedAt: request.UpdatedAt
+      } : null,
+      createdAt: pallet.CreatedAt,
+      updatedAt: pallet.UpdatedAt
+    };
+  });
 };
 
 // Request Car Release Service
@@ -424,6 +523,26 @@ const requestCarRelease = async (userId, palletId) => {
       }
     ]
   });
+
+  // Send notification to operator
+  const notificationService = require('./notification.service');
+  if (operator && operator.user) {
+    const customer = await User.findByPk(userId, { attributes: ['Id', 'Username'] });
+    const customerName = customer ? customer.Username : 'A customer';
+    const carInfo = pallet.car ? `${pallet.car.CarCompany} ${pallet.car.CarModel} (${pallet.car.CarNumber})` : 'their car';
+    
+    await notificationService.sendNotificationToUser(
+      operator.user.Id,
+      'New Car Release Request',
+      `${customerName} has requested to release ${carInfo} from pallet ${pallet.UserGivenPalletNumber || `Level ${pallet.Level}, Column ${pallet.Column}`}`,
+      {
+        type: 'car_release_request',
+        requestId: request.Id.toString(),
+        userId: userId.toString(),
+        palletId: palletId.toString()
+      }
+    );
+  }
 
   return {
     request: {
@@ -669,6 +788,7 @@ module.exports = {
   getCustomerProfile,
   createCar,
   getCarList,
+  getAvailableCarList,
   getCustomerPalletStatus,
   requestCarRelease,
   getCustomerRequests,

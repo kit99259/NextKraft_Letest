@@ -25,10 +25,11 @@ const signUp = async (req, res) => {
  */
 const login = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, fcmToken } = req.body;
     
     // Login service works for all user roles
-    const result = await authService.login(username, password);
+    // fcmToken is optional - if provided, it will be stored in user table
+    const result = await authService.login(username, password, fcmToken);
     
     return successResponse(res, result, 'Login successful');
   } catch (error) {

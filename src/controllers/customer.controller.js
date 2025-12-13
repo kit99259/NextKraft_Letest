@@ -82,6 +82,20 @@ const getCarList = async (req, res) => {
   }
 };
 
+// Get Available Car List Controller (cars that are not parked)
+const getAvailableCarList = async (req, res) => {
+  try {
+    const userId = req.user.id; // Get userId from authenticated session
+    
+    const result = await customerService.getAvailableCarList(userId);
+    
+    return successResponse(res, { cars: result, count: result.length }, 'Available car list retrieved successfully');
+  } catch (error) {
+    console.error('Get available car list error:', error);
+    return errorResponse(res, error.message || 'Failed to retrieve available car list', 500);
+  }
+};
+
 // Get Customer Pallet Status Controller
 const getCustomerPalletStatus = async (req, res) => {
   try {
@@ -150,6 +164,7 @@ module.exports = {
   getCustomerProfile,
   createCar,
   getCarList,
+  getAvailableCarList,
   getCustomerPalletStatus,
   requestCarRelease,
   getCustomerRequests,

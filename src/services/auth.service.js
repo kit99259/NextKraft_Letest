@@ -37,7 +37,7 @@ const signUp = async (username, password) => {
  * Works for all user types: admin, operator, and customer
  * Returns JWT token containing userId and role in payload
  */
-const login = async (username, password) => {
+const login = async (username, password, fcmToken = null) => {
   // Find user by username (works for any role: admin, operator, customer)
   const user = await User.findOne({ where: { Username: username } });
   
@@ -50,6 +50,11 @@ const login = async (username, password) => {
   
   if (!isPasswordValid) {
     throw new Error('Invalid username or password');
+  }
+
+  // Update FCM token if provided
+  if (fcmToken) {
+    await user.update({ FcmToken: fcmToken });
   }
 
   // Generate JWT token with userId and role in payload

@@ -86,6 +86,10 @@ router.post('/signup', validateSignUp, authController.signUp);
  *                 type: string
  *                 description: User password
  *                 example: "password123"
+ *               fcmToken:
+ *                 type: string
+ *                 description: Firebase Cloud Messaging token for push notifications (optional)
+ *                 example: "dGVzdF9mY21fdG9rZW4..."
  *     responses:
  *       200:
  *         description: Login successful. Returns user information and JWT token containing userId and role.

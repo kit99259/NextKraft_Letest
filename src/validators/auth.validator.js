@@ -50,6 +50,11 @@ const validateLogin = [
     .notEmpty()
     .withMessage('Password is required'),
   
+  body('fcmToken')
+    .optional()
+    .isString()
+    .withMessage('FCM token must be a string'),
+  
   handleValidationErrors
 ];
 

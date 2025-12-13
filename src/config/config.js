@@ -24,6 +24,16 @@ module.exports = {
   cors: {
     origin: process.env.CORS_ORIGIN || '*',
     credentials: true
+  },
+  
+  // Firebase Cloud Messaging configuration
+  fcm: {
+    // Firebase Admin SDK service account key (JSON string or path to JSON file)
+    // You can either:
+    // 1. Set FCM_SERVICE_ACCOUNT_KEY as a JSON string in .env
+    // 2. Set FCM_SERVICE_ACCOUNT_PATH as path to JSON file
+    serviceAccountKey: process.env.FCM_SERVICE_ACCOUNT_KEY || null,
+    serviceAccountPath: process.env.FCM_SERVICE_ACCOUNT_PATH || null
   }
 };
 

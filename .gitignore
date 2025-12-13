@@ -17,7 +17,7 @@ yarn-error.log*
 *.crt
 *.cert
 !ca.pem.example
-
+service_account.json
 # Logs
 logs
 *.log
