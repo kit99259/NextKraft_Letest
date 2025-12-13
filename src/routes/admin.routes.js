@@ -4,6 +4,7 @@ const { authenticate, authorize } = require('../middleware/auth.middleware');
 const parkingSystemController = require('../controllers/parkingSystem.controller');
 const operatorController = require('../controllers/operator.controller');
 const customerController = require('../controllers/customer.controller');
+const authController = require('../controllers/auth.controller');
 const { validateCreateParkingSystem } = require('../validators/parkingSystem.validator');
 const { validateUpdatePalletPower } = require('../validators/operator.validator');
 
@@ -607,6 +608,76 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  *         description: Server error
  */
 router.put('/update-operator-pallet-power', authorize('admin'), validateUpdatePalletPower, operatorController.updateOperatorPalletPower);
+
+/**
+ * @swagger
+ * /api/admin/user-password/{username}:
+ *   get:
+ *     summary: Get user password by username (Admin only)
+ *     description: Returns user details including the hashed password for the specified username. This endpoint is restricted to admin users only.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: username
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The username of the user to retrieve password for
+ *         example: "john_doe"
+ *     responses:
+ *       200:
+ *         description: User password retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "User password retrieved successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                           example: 1
+ *                         username:
+ *                           type: string
+ *                           example: "john_doe"
+ *                         password:
+ *                           type: string
+ *                           description: Hashed password
+ *                           example: "$2a$10$..."
+ *                         role:
+ *                           type: string
+ *                           enum: [admin, operator, customer]
+ *                           example: "customer"
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *       400:
+ *         description: Username is required
+ *       401:
+ *         description: Unauthorized - Authentication required
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+router.get('/user-password/:username', authorize('admin'), authController.getUserPasswordByUsername);
 
 module.exports = router;
 
