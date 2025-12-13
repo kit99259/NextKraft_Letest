@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth.middleware');
 const customerController = require('../controllers/customer.controller');
+const parkingRequestController = require('../controllers/parkingRequest.controller');
 const { validateCreateCustomer } = require('../validators/customer.validator');
 const { validateCreateCar } = require('../validators/car.validator');
 const { validateRequestCarRelease } = require('../validators/pallet.validator');
@@ -778,6 +779,37 @@ router.post('/release-car-request', authenticate, validateRequestCarRelease, cus
  *         description: Unauthorized - Authentication required
  */
 router.get('/requests', authenticate, customerController.getCustomerRequests);
+
+/**
+ * @swagger
+ * /api/customer/parking-request:
+ *   post:
+ *     summary: Raise a parking request for a specific car (Customer only)
+ *     tags: [Customer]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - carId
+ *             properties:
+ *               carId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 example: 1
+ *     responses:
+ *       201:
+ *         description: Parking request created successfully
+ *       404:
+ *         description: Car not found, customer profile missing, or no operator assigned
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/parking-request', authenticate, parkingRequestController.createParkingRequest);
 
 module.exports = router;
 

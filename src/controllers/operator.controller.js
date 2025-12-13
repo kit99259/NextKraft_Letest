@@ -160,6 +160,23 @@ const updateOperatorPalletPower = async (req, res) => {
   }
 };
 
+// Get Operator Customers with Cars (Project + Parking System)
+const getOperatorCustomersWithCars = async (req, res) => {
+  try {
+    const operatorUserId = req.user.id; // authenticated operator userId
+
+    const result = await operatorService.getOperatorCustomersWithCars(operatorUserId);
+
+    return successResponse(res, result, 'Customers with cars retrieved successfully');
+  } catch (error) {
+    console.error('Get operator customers with cars error:', error);
+    const statusCode = error.message === 'Operator profile not found' ||
+                       error.message === 'Operator is not assigned to any project' ||
+                       error.message === 'Operator is not assigned to any parking system' ? 404 : 500;
+    return errorResponse(res, error.message || 'Failed to retrieve customers with cars', statusCode);
+  }
+};
+
 module.exports = {
   createOperator,
   getOperatorProfile,
@@ -168,6 +185,7 @@ module.exports = {
   assignPalletToCustomer,
   getOperatorRequests,
   updateRequestStatus,
-  updateOperatorPalletPower
+  updateOperatorPalletPower,
+  getOperatorCustomersWithCars
 };
 

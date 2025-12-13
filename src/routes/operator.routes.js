@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const operatorController = require('../controllers/operator.controller');
 const parkingSystemController = require('../controllers/parkingSystem.controller');
+const parkingRequestController = require('../controllers/parkingRequest.controller');
 const { validateCreateOperator } = require('../validators/operator.validator');
 const { validateAssignPallet, validateUpdateRequestStatus } = require('../validators/pallet.validator');
 
@@ -444,6 +445,178 @@ router.get('/profile', authorize('operator'), operatorController.getOperatorProf
  *         description: Operator profile not found or operator not assigned to any project
  */
 router.get('/project', authorize('operator'), operatorController.getOperatorProjectWithParkingSystems);
+
+/**
+ * @swagger
+ * /api/operator/customers-with-cars:
+ *   get:
+ *     summary: Get customers (with cars) for operator's project and parking system (Operator only)
+ *     description: Returns customers filtered to the authenticated operator's project and parking system, including their car details.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Customers retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     customers:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           userId:
+ *                             type: integer
+ *                           user:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               username:
+ *                                 type: string
+ *                               role:
+ *                                 type: string
+ *                               createdAt:
+ *                                 type: string
+ *                                 format: date-time
+ *                               updatedAt:
+ *                                 type: string
+ *                                 format: date-time
+ *                           firstName:
+ *                             type: string
+ *                           lastName:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                           mobileNumber:
+ *                             type: string
+ *                           projectId:
+ *                             type: integer
+ *                           parkingSystemId:
+ *                             type: integer
+ *                           flatNumber:
+ *                             type: string
+ *                           profession:
+ *                             type: string
+ *                           status:
+ *                             type: string
+ *                             enum: [Approved, Rejected, Pending]
+ *                           approvedBy:
+ *                             type: integer
+ *                             nullable: true
+ *                           approvedAt:
+ *                             type: string
+ *                             format: date-time
+ *                             nullable: true
+ *                           cars:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 userId:
+ *                                   type: integer
+ *                                 carType:
+ *                                   type: string
+ *                                 carModel:
+ *                                   type: string
+ *                                 carCompany:
+ *                                   type: string
+ *                                 carNumber:
+ *                                   type: string
+ *                                 createdAt:
+ *                                   type: string
+ *                                   format: date-time
+ *                                 updatedAt:
+ *                                   type: string
+ *                                   format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of customers returned
+ *       401:
+ *         description: Unauthorized - Authentication required
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator profile not found or not assigned to project/parking system
+ */
+router.get('/customers-with-cars', authorize('operator'), operatorController.getOperatorCustomersWithCars);
+
+/**
+ * @swagger
+ * /api/operator/parking-requests:
+ *   get:
+ *     summary: Get parking requests assigned to the operator
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Parking requests retrieved successfully
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator profile not found
+ */
+router.get('/parking-requests', authorize('operator'), parkingRequestController.getOperatorParkingRequests);
+
+/**
+ * @swagger
+ * /api/operator/parking-requests/{requestId}/status:
+ *   put:
+ *     summary: Update parking request status (Operator only)
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Parking request ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [Pending, Accepted, Completed]
+ *                 example: Accepted
+ *     responses:
+ *       200:
+ *         description: Parking request status updated successfully
+ *       400:
+ *         description: Invalid status transition
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator or parking request not found
+ */
+router.put('/parking-requests/:requestId/status', authorize('operator'), parkingRequestController.updateParkingRequestStatus);
 
 /**
  * @swagger

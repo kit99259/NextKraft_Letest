@@ -1,3 +1,4 @@
+const { sequelize } = require('../config/database');
 const { Project, ParkingSystem, PalletAllotment, Car, User } = require('../models/associations');
 
 // Helper function to get IST time
@@ -52,7 +53,13 @@ const createParkingSystem = async (parkingSystemData) => {
   
   // Step 5: Create multiple pallet details entries
   const palletDetails = [];
-  let userGivenPalletNumber = 1;
+
+  // Determine starting pallet number for this project (increment per project)
+  const lastPallet = await PalletAllotment.findOne({
+    where: { ProjectId: projectId },
+    order: [[sequelize.literal('CAST("UserGivenPalletNumber" AS INTEGER)'), 'DESC']]
+  });
+  let userGivenPalletNumber = lastPallet ? (parseInt(lastPallet.UserGivenPalletNumber, 10) + 1) : 1;
   
   for (let currentLevel = 1; currentLevel <= parkingSystemData.Level; currentLevel++) {
     for (let currentColumn = 1; currentColumn <= parkingSystemData.Column; currentColumn++) {

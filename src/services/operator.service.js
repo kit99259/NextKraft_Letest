@@ -1,4 +1,5 @@
-const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request } = require('../models/associations');
+const { Op } = require('sequelize');
+const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request, RequestQueue } = require('../models/associations');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -680,20 +681,41 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
     UpdatedAt: istTime
   });
 
-  // Step 5: If status is "Completed", release the pallet
-  if (newStatus === 'Completed' && request.palletAllotment) {
-    const pallet = request.palletAllotment;
-    
-    // Release the pallet: set UserId to 0, CarId to null, Status to 'Released'
-    await pallet.update({
-      UserId: 0,
-      CarId: null,
-      Status: 'Released',
+  // Step 5: If status is "Completed", release pallet, move to RequestQueue, then remove request
+  if (newStatus === 'Completed') {
+    if (request.palletAllotment) {
+      const pallet = request.palletAllotment;
+
+      // Release the pallet: set UserId to 0, CarId to null, Status to 'Released'
+      await pallet.update({
+        UserId: 0,
+        CarId: null,
+        Status: 'Released',
+        UpdatedAt: istTime
+      });
+    }
+
+    // Insert into RequestQueue as history
+    await RequestQueue.create({
+      UserId: request.UserId,
+      PalletAllotmentId: request.PalletAllotmentId,
+      OperatorId: request.OperatorId,
+      Status: request.Status,
+      EstimatedTime: request.EstimatedTime,
+      CreatedAt: request.CreatedAt,
       UpdatedAt: istTime
     });
+
+    // Delete original request
+    await request.destroy();
+
+    return {
+      request: null,
+      message: 'Request completed, logged to history, and removed from active requests. Pallet has been released.'
+    };
   }
 
-  // Step 6: Reload request with all associations
+  // Step 6: Reload request with all associations for non-completed statuses
   await request.reload({
     include: [
       {
@@ -791,9 +813,7 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
       createdAt: request.CreatedAt,
       updatedAt: request.UpdatedAt
     },
-    message: newStatus === 'Completed' 
-      ? 'Request completed successfully. Pallet has been released.' 
-      : `Request status updated to ${newStatus} successfully.`
+    message: `Request status updated to ${newStatus} successfully.`
   };
 };
 
@@ -873,6 +893,93 @@ const updateOperatorPalletPower = async (operatorId, hasPalletPower) => {
   };
 };
 
+// Get Customers (with cars) for Operator's Project & Parking System
+const getOperatorCustomersWithCars = async (operatorUserId) => {
+  // Find operator by userId to determine scope
+  const operator = await Operator.findOne({
+    where: { UserId: operatorUserId }
+  });
+
+  if (!operator) {
+    throw new Error('Operator profile not found');
+  }
+
+  if (!operator.ProjectId) {
+    throw new Error('Operator is not assigned to any project');
+  }
+
+  if (!operator.ParkingSystemId) {
+    throw new Error('Operator is not assigned to any parking system');
+  }
+
+  // Fetch customers belonging to operator's project and parking system
+  const customers = await Customer.findAll({
+    where: {
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId
+    },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role', 'CreatedAt', 'UpdatedAt']
+      }
+    ],
+    order: [['CreatedAt', 'DESC']]
+  });
+
+  // Pull all cars for these customer users in one query
+  const userIds = customers.map(customer => customer.UserId);
+  let carsByUserId = {};
+
+  if (userIds.length) {
+    const cars = await Car.findAll({
+      where: { UserId: { [Op.in]: userIds } },
+      attributes: ['Id', 'UserId', 'CarType', 'CarModel', 'CarCompany', 'CarNumber', 'CreatedAt', 'UpdatedAt'],
+      order: [['CreatedAt', 'DESC']]
+    });
+
+    carsByUserId = cars.reduce((acc, car) => {
+      if (!acc[car.UserId]) {
+        acc[car.UserId] = [];
+      }
+      acc[car.UserId].push({
+        id: car.Id,
+        userId: car.UserId,
+        carType: car.CarType,
+        carModel: car.CarModel,
+        carCompany: car.CarCompany,
+        carNumber: car.CarNumber,
+        createdAt: car.CreatedAt,
+        updatedAt: car.UpdatedAt
+      });
+      return acc;
+    }, {});
+  }
+
+  return {
+    customers: customers.map(customer => ({
+      id: customer.Id,
+      userId: customer.UserId,
+      firstName: customer.FirstName,
+      lastName: customer.LastName,
+      email: customer.Email,
+      mobileNumber: customer.MobileNumber,
+      projectId: customer.ProjectId,
+      parkingSystemId: customer.ParkingSystemId,
+      flatNumber: customer.FlatNumber,
+      profession: customer.Profession,
+      status: customer.Status,
+      approvedBy: customer.ApprovedBy,
+      approvedAt: customer.ApprovedAt,
+      createdAt: customer.CreatedAt,
+      updatedAt: customer.UpdatedAt,
+      cars: carsByUserId[customer.UserId] || []
+    })),
+    count: customers.length
+  };
+};
+
 module.exports = {
   createOperator,
   getOperatorProfile,
@@ -881,6 +988,7 @@ module.exports = {
   assignPalletToCustomer,
   getOperatorRequests,
   updateRequestStatus,
-  updateOperatorPalletPower
+  updateOperatorPalletPower,
+  getOperatorCustomersWithCars
 };
 
