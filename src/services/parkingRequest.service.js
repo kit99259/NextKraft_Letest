@@ -1,3 +1,4 @@
+const notificationService = require('./notification.service');
 const { User, Customer, Operator, Car, ParkingRequest } = require('../models/associations');
 
 const getISTTime = () => {
@@ -60,7 +61,14 @@ const createParkingRequest = async (userId, carId) => {
       {
         model: Operator,
         as: 'operator',
-        attributes: ['Id', 'ProjectId', 'ParkingSystemId', 'Status']
+        attributes: ['Id', 'ProjectId', 'ParkingSystemId', 'Status'],
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['Id', 'Username']
+          }
+        ]
       },
       {
         model: Car,
@@ -69,6 +77,24 @@ const createParkingRequest = async (userId, carId) => {
       }
     ]
   });
+
+  // Notify operator
+  if (parkingRequest.operator && parkingRequest.operator.user) {
+    const carInfo = parkingRequest.car
+      ? `${parkingRequest.car.CarCompany} ${parkingRequest.car.CarModel} (${parkingRequest.car.CarNumber})`
+      : 'a car';
+    await notificationService.sendNotificationToUser(
+      parkingRequest.operator.user.Id,
+      'New Parking Request',
+      `New parking request for ${carInfo}`,
+      {
+        type: 'parking_request_created',
+        parkingRequestId: parkingRequest.Id.toString(),
+        userId: userId.toString(),
+        carId: parkingRequest.CarId.toString()
+      }
+    );
+  }
 
   return {
     id: parkingRequest.Id,
@@ -179,6 +205,18 @@ const updateParkingRequestStatus = async (operatorUserId, parkingRequestId, newS
     Status: newStatus,
     UpdatedAt: istTime
   });
+
+  // Notify customer
+  await notificationService.sendNotificationToUser(
+    parkingRequest.UserId,
+    'Parking Request Status Updated',
+    `Your parking request status is now ${newStatus}`,
+    {
+      type: 'parking_request_status_update',
+      parkingRequestId: parkingRequest.Id.toString(),
+      status: newStatus
+    }
+  );
 
   return {
     id: parkingRequest.Id,
