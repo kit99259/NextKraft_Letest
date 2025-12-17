@@ -177,6 +177,27 @@ const getOperatorCustomersWithCars = async (req, res) => {
   }
 };
 
+// Approve Customer (Operator)
+const approveCustomer = async (req, res) => {
+  try {
+    const operatorUserId = req.user.id; // authenticated operator userId
+    const { customerId } = req.body;
+
+    const result = await operatorService.approveCustomer(
+      operatorUserId,
+      parseInt(customerId)
+    );
+
+    return successResponse(res, result, 'Customer approved successfully');
+  } catch (error) {
+    console.error('Approve customer error:', error);
+    const statusCode = error.message === 'Operator profile not found' ||
+                       error.message === 'Customer not found' ? 404 :
+                       error.message === 'Customer does not belong to the same project as the operator' ? 400 : 500;
+    return errorResponse(res, error.message || 'Failed to approve customer', statusCode);
+  }
+};
+
 module.exports = {
   createOperator,
   getOperatorProfile,
@@ -186,6 +207,7 @@ module.exports = {
   getOperatorRequests,
   updateRequestStatus,
   updateOperatorPalletPower,
-  getOperatorCustomersWithCars
+  getOperatorCustomersWithCars,
+  approveCustomer
 };
 

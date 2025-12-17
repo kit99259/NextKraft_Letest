@@ -620,6 +620,42 @@ router.put('/parking-requests/:requestId/status', authorize('operator'), parking
 
 /**
  * @swagger
+ * /api/operator/customer/approve:
+ *   post:
+ *     summary: Approve a customer (Operator)
+ *     description: Operator approves a customer that belongs to their project. Sets the customer's status to Approved.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - customerId
+ *             properties:
+ *               customerId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 example: 12
+ *     responses:
+ *       200:
+ *         description: Customer approved successfully
+ *       400:
+ *         description: Customer does not belong to the same project as the operator
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator or customer not found
+ */
+router.post('/customer/approve', authorize('operator'), operatorController.approveCustomer);
+
+/**
+ * @swagger
  * /api/operator/pallet-details:
  *   get:
  *     summary: Get all pallet details for a specific project and parking system (Admin and Operator)

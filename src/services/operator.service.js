@@ -1,6 +1,6 @@
 const { Op } = require('sequelize');
 const notificationService = require('./notification.service');
-const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request, RequestQueue } = require('../models/associations');
+const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request, RequestQueue, ParkingRequest } = require('../models/associations');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -419,6 +419,21 @@ const assignPalletToCustomer = async (operatorUserId, palletId, customerId, carI
     Status: 'Assigned',
     UpdatedAt: istTime
   });
+
+  // Step 10.1: Mark active parking requests for this user and car as completed
+  await ParkingRequest.update(
+    {
+      Status: 'Completed',
+      UpdatedAt: istTime
+    },
+    {
+      where: {
+        UserId: customer.UserId,
+        CarId: car.Id,
+        Status: { [Op.ne]: 'Completed' }
+      }
+    }
+  );
 
   // Step 11: Reload pallet with associations
   await pallet.reload({
@@ -1022,6 +1037,52 @@ const getOperatorCustomersWithCars = async (operatorUserId) => {
   };
 };
 
+// Approve Customer (Operator)
+const approveCustomer = async (operatorUserId, customerId) => {
+  // Validate operator exists
+  const operator = await Operator.findOne({
+    where: { UserId: operatorUserId }
+  });
+
+  if (!operator) {
+    throw new Error('Operator profile not found');
+  }
+
+  // Validate customer exists
+  const customer = await Customer.findByPk(customerId);
+  if (!customer) {
+    throw new Error('Customer not found');
+  }
+
+  // Ensure operator and customer belong to same project (when operator has project)
+  if (operator.ProjectId && customer.ProjectId && operator.ProjectId !== customer.ProjectId) {
+    throw new Error('Customer does not belong to the same project as the operator');
+  }
+
+  const istTime = getISTTime();
+  await customer.update({
+    Status: 'Approved',
+    ApprovedBy: operatorUserId,
+    ApprovedAt: istTime,
+    UpdatedAt: istTime
+  });
+
+  return {
+    id: customer.Id,
+    userId: customer.UserId,
+    firstName: customer.FirstName,
+    lastName: customer.LastName,
+    email: customer.Email,
+    mobileNumber: customer.MobileNumber,
+    projectId: customer.ProjectId,
+    parkingSystemId: customer.ParkingSystemId,
+    status: customer.Status,
+    approvedBy: customer.ApprovedBy,
+    approvedAt: customer.ApprovedAt,
+    updatedAt: customer.UpdatedAt
+  };
+};
+
 module.exports = {
   createOperator,
   getOperatorProfile,
@@ -1031,6 +1092,7 @@ module.exports = {
   getOperatorRequests,
   updateRequestStatus,
   updateOperatorPalletPower,
-  getOperatorCustomersWithCars
+  getOperatorCustomersWithCars,
+  approveCustomer
 };
 

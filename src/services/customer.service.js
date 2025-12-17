@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { User, Customer, ParkingSystem, Project, Car, PalletAllotment, Request, Operator } = require('../models/associations');
+const { User, Customer, ParkingSystem, Project, Car, PalletAllotment, Request, Operator, ParkingRequest } = require('../models/associations');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -242,7 +242,7 @@ const getAvailableCarList = async (userId) => {
     order: [['CreatedAt', 'DESC']]
   });
 
-  // Get all carIds that are currently assigned/parked in PalletAllotment for this user
+  // Get carIds that are currently parked (Assigned pallets)
   const parkedCars = await PalletAllotment.findAll({
     where: {
       UserId: userId,
@@ -252,13 +252,29 @@ const getAvailableCarList = async (userId) => {
     raw: true
   });
 
-  // Extract carIds that are parked (filter out null carIds)
   const parkedCarIds = parkedCars
     .map(p => p.CarId)
     .filter(carId => carId !== null);
 
-  // Filter out cars that are in the parked list
-  const availableCars = allCars.filter(car => !parkedCarIds.includes(car.Id));
+  // Get carIds that have active (non-completed) parking requests
+  const activeParkingRequests = await ParkingRequest.findAll({
+    where: {
+      UserId: userId,
+      Status: { [Op.ne]: 'Completed' }
+    },
+    attributes: ['CarId'],
+    raw: true
+  });
+
+  const parkingRequestCarIds = activeParkingRequests
+    .map(req => req.CarId)
+    .filter(carId => carId !== null);
+
+  // Combine parked and active parking-request car IDs to exclude
+  const excludedCarIds = new Set([...parkedCarIds, ...parkingRequestCarIds]);
+
+  // Filter out cars that are parked or have an active request
+  const availableCars = allCars.filter(car => !excludedCarIds.has(car.Id));
 
   return availableCars.map(car => ({
     id: car.Id,
