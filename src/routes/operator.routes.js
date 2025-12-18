@@ -602,7 +602,7 @@ router.get('/parking-requests', authorize('operator'), parkingRequestController.
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [Pending, Accepted, Completed]
+ *                 enum: [Pending, Accepted, Completed, Cancelled]
  *                 example: Accepted
  *     responses:
  *       200:

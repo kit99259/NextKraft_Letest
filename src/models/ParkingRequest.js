@@ -32,7 +32,7 @@ const ParkingRequest = sequelize.define('ParkingRequest', {
     }
   },
   Status: {
-    type: DataTypes.ENUM('Pending', 'Accepted', 'Completed'),
+    type: DataTypes.ENUM('Pending', 'Accepted', 'Completed', 'Cancelled'),
     defaultValue: 'Pending'
   },
   CreatedAt: {

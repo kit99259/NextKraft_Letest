@@ -256,11 +256,11 @@ const getAvailableCarList = async (userId) => {
     .map(p => p.CarId)
     .filter(carId => carId !== null);
 
-  // Get carIds that have active (non-completed) parking requests
+  // Get carIds that have active (non-completed and non-cancelled) parking requests
   const activeParkingRequests = await ParkingRequest.findAll({
     where: {
       UserId: userId,
-      Status: { [Op.ne]: 'Completed' }
+      Status: { [Op.notIn]: ['Completed', 'Cancelled'] }
     },
     attributes: ['CarId'],
     raw: true
@@ -361,8 +361,49 @@ const getCustomerPalletStatus = async (userId) => {
     });
   }
 
+  // Calculate waiting number for each request
+  // Get all operator IDs from the requests
+  const operatorIds = Array.from(requestsMap.values())
+    .map(req => req.OperatorId)
+    .filter(id => id !== null && id !== undefined);
+
+  // Get all non-completed requests for these operators to calculate waiting numbers
+  const allOperatorRequests = operatorIds.length > 0 ? await Request.findAll({
+    where: {
+      OperatorId: { [Op.in]: operatorIds },
+      Status: { [Op.ne]: 'Completed' }
+    },
+    attributes: ['Id', 'OperatorId', 'CreatedAt'],
+    order: [['CreatedAt', 'ASC']]
+  }) : [];
+
+  // Group requests by operator ID
+  const requestsByOperator = new Map();
+  allOperatorRequests.forEach(req => {
+    if (!requestsByOperator.has(req.OperatorId)) {
+      requestsByOperator.set(req.OperatorId, []);
+    }
+    requestsByOperator.get(req.OperatorId).push(req);
+  });
+
+  // Calculate waiting number for each request
+  const waitingNumbersMap = new Map();
+  requestsMap.forEach((request, palletId) => {
+    if (request && request.OperatorId) {
+      const operatorRequests = requestsByOperator.get(request.OperatorId) || [];
+      // Count requests created before this request
+      const waitingNumber = operatorRequests.filter(req => 
+        req.CreatedAt < request.CreatedAt
+      ).length;
+      waitingNumbersMap.set(palletId, waitingNumber);
+    } else {
+      waitingNumbersMap.set(palletId, null);
+    }
+  });
+
   return pallets.map(pallet => {
     const request = requestsMap.get(pallet.Id);
+    const waitingNumber = waitingNumbersMap.get(pallet.Id);
     
     return {
       id: pallet.Id,
@@ -413,6 +454,7 @@ const getCustomerPalletStatus = async (userId) => {
         status: request.Status,
         estimatedTime: request.EstimatedTime,
         estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
+        waitingNumber: waitingNumber !== null && waitingNumber !== undefined ? waitingNumber : null,
         createdAt: request.CreatedAt,
         updatedAt: request.UpdatedAt
       } : null,
@@ -505,6 +547,23 @@ const requestCarRelease = async (userId, palletId) => {
     UpdatedAt: istTime
   });
 
+  // Step 5.1: Calculate total estimated time including waiting requests
+  // Find all non-completed requests for the same operator created before this request
+  const waitingRequests = await Request.findAll({
+    where: {
+      OperatorId: operator.Id,
+      Status: { [Op.ne]: 'Completed' },
+      CreatedAt: { [Op.lt]: istTime } // Created before this request
+    },
+    attributes: ['EstimatedTime']
+  });
+
+  // Sum up estimated times from waiting requests
+  const waitingTime = waitingRequests.reduce((sum, req) => sum + (req.EstimatedTime || 0), 0);
+  
+  // Total estimated time = waiting time + current request estimated time
+  const totalEstimatedTime = waitingTime + estimatedTime;
+
   // Step 6: Reload request with associations
   await request.reload({
     include: [
@@ -576,6 +635,9 @@ const requestCarRelease = async (userId, palletId) => {
       status: request.Status,
       estimatedTime: request.EstimatedTime,
       estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
+      totalEstimatedTime: totalEstimatedTime,
+      totalEstimatedTimeFormatted: `${Math.floor(totalEstimatedTime / 60)} minutes ${totalEstimatedTime % 60} seconds`,
+      waitingNumber: waitingRequests.length,
       createdAt: request.CreatedAt,
       updatedAt: request.UpdatedAt
     },

@@ -190,9 +190,10 @@ const updateParkingRequestStatus = async (operatorUserId, parkingRequestId, newS
   }
 
   const validTransitions = {
-    Pending: ['Accepted', 'Completed'],
-    Accepted: ['Completed'],
-    Completed: []
+    Pending: ['Accepted', 'Completed', 'Cancelled'],
+    Accepted: ['Completed', 'Cancelled'],
+    Completed: [],
+    Cancelled: []
   };
 
   if (!validTransitions[parkingRequest.Status] || !validTransitions[parkingRequest.Status].includes(newStatus)) {

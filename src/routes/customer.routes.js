@@ -580,6 +580,11 @@ router.get('/car/available', authenticate, customerController.getAvailableCarLis
  *                                 type: string
  *                                 description: Estimated time in human-readable format
  *                                 example: "5 minutes 30 seconds"
+ *                               waitingNumber:
+ *                                 type: integer
+ *                                 nullable: true
+ *                                 description: Number of release requests ahead of this request for the same operator (only included if request exists)
+ *                                 example: 3
  *                               createdAt:
  *                                 type: string
  *                                 format: date-time
@@ -605,7 +610,7 @@ router.get('/pallet-status', authenticate, customerController.getCustomerPalletS
  * /api/customer/release-car-request:
  *   post:
  *     summary: Request to release car from pallet (Customer authentication required)
- *     description: Creates a request to release the customer's car from an assigned pallet. The request will be assigned to the operator for the parking system. Returns estimated time to bring down the car.
+ *     description: Creates a request to release the customer's car from an assigned pallet. The request will be assigned to the operator for the parking system. Returns estimated time to bring down the car, including waiting time from other requests ahead in the queue.
  *     tags: [Customer]
  *     security:
  *       - bearerAuth: []
@@ -670,8 +675,19 @@ router.get('/pallet-status', authenticate, customerController.getCustomerPalletS
  *                           description: Estimated time in seconds
  *                         estimatedTimeFormatted:
  *                           type: string
- *                           description: Estimated time in human-readable format
+ *                           description: Estimated time in human-readable format (for this request only)
  *                           example: "5 minutes 30 seconds"
+ *                         totalEstimatedTime:
+ *                           type: integer
+ *                           description: Total estimated time in seconds including waiting requests (waiting requests time + this request time)
+ *                         totalEstimatedTimeFormatted:
+ *                           type: string
+ *                           description: Total estimated time in human-readable format including waiting requests
+ *                           example: "18 minutes 30 seconds"
+ *                         waitingNumber:
+ *                           type: integer
+ *                           description: Number of release requests ahead of this request for the same operator
+ *                           example: 3
  *                         createdAt:
  *                           type: string
  *                           format: date-time

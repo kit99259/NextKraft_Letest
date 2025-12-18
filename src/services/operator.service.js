@@ -430,7 +430,7 @@ const assignPalletToCustomer = async (operatorUserId, palletId, customerId, carI
       where: {
         UserId: customer.UserId,
         CarId: car.Id,
-        Status: { [Op.ne]: 'Completed' }
+        Status: { [Op.notIn]: ['Completed', 'Cancelled'] }
       }
     }
   );
