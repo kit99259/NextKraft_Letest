@@ -4,7 +4,7 @@ const { successResponse, errorResponse } = require('../utils');
 // Create Parking System Controller
 const createParkingSystem = async (req, res) => {
   try {
-    const { projectName, societyName, wingName, type, level, column, timeForEachLevel, timeForHorizontalMove } = req.body;
+    const { projectName, societyName, wingName, type, level, levelBelowGround, column, timeForEachLevel, timeForHorizontalMove, bufferTime } = req.body;
     
     const result = await parkingSystemService.createParkingSystem({
       ProjectName: projectName,
@@ -12,16 +12,43 @@ const createParkingSystem = async (req, res) => {
       WingName: wingName,
       Type: type,
       Level: level,
+      LevelBelowGround: levelBelowGround,
       Column: column,
       TimeForEachLevel: timeForEachLevel,
-      TimeForHorizontalMove: timeForHorizontalMove
+      TimeForHorizontalMove: timeForHorizontalMove,
+      BufferTime: bufferTime
     });
     
     return successResponse(res, result, 'Parking system created successfully', 201);
   } catch (error) {
     console.error('Create parking system error:', error);
-    const statusCode = error.message === 'Project name already exists' ? 400 : 500;
+    const statusCode = error.message === 'Project name already exists' || 
+                      error.message === 'LevelBelowGround is required for Puzzle parking system' ? 400 : 500;
     return errorResponse(res, error.message || 'Failed to create parking system', statusCode);
+  }
+};
+
+// Generate Pallets Controller
+const generatePallets = async (req, res) => {
+  try {
+    const { parkingSystemId, startingPalletNumber } = req.body;
+    
+    if (!parkingSystemId || !startingPalletNumber) {
+      return errorResponse(res, 'Parking System ID and Starting Pallet Number are required', 400);
+    }
+    
+    const result = await parkingSystemService.generatePallets(
+      parseInt(parkingSystemId),
+      parseInt(startingPalletNumber)
+    );
+    
+    return successResponse(res, result, 'Pallets generated successfully', 201);
+  } catch (error) {
+    console.error('Generate pallets error:', error);
+    const statusCode = error.message === 'Parking system not found' ||
+                      error.message === 'Pallets already exist for this parking system' ||
+                      error.message === 'Starting pallet number must be a positive integer' ? 400 : 500;
+    return errorResponse(res, error.message || 'Failed to generate pallets', statusCode);
   }
 };
 
@@ -63,6 +90,7 @@ const getPalletDetails = async (req, res) => {
 module.exports = {
   createParkingSystem,
   getProjectListWithParkingSystems,
-  getPalletDetails
+  getPalletDetails,
+  generatePallets
 };
 

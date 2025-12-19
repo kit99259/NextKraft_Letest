@@ -25,7 +25,13 @@ const ParkingSystem = sequelize.define('ParkingSystem', {
   },
   Level: {
     type: DataTypes.INTEGER,
-    allowNull: false
+    allowNull: false,
+    comment: 'Level above ground (used for both Tower and Puzzle)'
+  },
+  LevelBelowGround: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'Level below ground (used for Puzzle parking only, NULL for Tower)'
   },
   Column: {
     type: DataTypes.INTEGER,
@@ -40,6 +46,10 @@ const ParkingSystem = sequelize.define('ParkingSystem', {
     defaultValue: 0
   },
   TimeForHorizontalMove: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  BufferTime: {
     type: DataTypes.INTEGER,
     defaultValue: 0
   },

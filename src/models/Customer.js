@@ -47,6 +47,15 @@ const Customer = sequelize.define('Customer', {
       key: 'Id'
     }
   },
+  PalletAllotmentId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'Pre-assigned pallet for Puzzle parking (set when customer approved, NULL for Tower)',
+    references: {
+      model: 'PalletDetails',
+      key: 'Id'
+    }
+  },
   FlatNumber: {
     type: DataTypes.STRING(50),
     allowNull: true

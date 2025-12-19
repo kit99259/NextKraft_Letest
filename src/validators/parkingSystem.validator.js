@@ -43,9 +43,25 @@ const validateCreateParkingSystem = [
   
   body('level')
     .notEmpty()
-    .withMessage('Level is required')
+    .withMessage('Level (Level Above Ground) is required')
     .isInt({ min: 1 })
     .withMessage('Level must be a positive integer'),
+  
+  body('levelBelowGround')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('Level Below Ground must be a non-negative integer')
+    .custom((value, { req }) => {
+      // If type is Puzzle, levelBelowGround is required
+      if (req.body.type === 'Puzzle' && (value === undefined || value === null || value < 0)) {
+        throw new Error('Level Below Ground is required for Puzzle parking system');
+      }
+      // If type is Tower, levelBelowGround should not be provided
+      if (req.body.type === 'Tower' && value !== undefined && value !== null) {
+        throw new Error('Level Below Ground should not be provided for Tower parking system');
+      }
+      return true;
+    }),
   
   body('column')
     .notEmpty()
@@ -62,6 +78,11 @@ const validateCreateParkingSystem = [
     .optional()
     .isInt({ min: 0 })
     .withMessage('Time for horizontal move must be a non-negative integer'),
+  
+  body('bufferTime')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('Buffer time must be a non-negative integer'),
   
   handleValidationErrors
 ];

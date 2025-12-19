@@ -23,11 +23,27 @@ const RequestQueue = sequelize.define('RequestQueue', {
       key: 'Id'
     }
   },
-  OperatorId: {
+  ProjectId: {
     type: DataTypes.INTEGER,
-    allowNull: true,
+    allowNull: false,
     references: {
-      model: 'operators',
+      model: 'projects',
+      key: 'Id'
+    }
+  },
+  ParkingSystemId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'parking_system',
+      key: 'Id'
+    }
+  },
+  CarId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'cars',
       key: 'Id'
     }
   },

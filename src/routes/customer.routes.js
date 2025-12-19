@@ -552,23 +552,46 @@ router.get('/car/available', authenticate, customerController.getAvailableCarLis
  *                                 type: integer
  *                               palletAllotmentId:
  *                                 type: integer
- *                               operatorId:
+ *                               projectId:
  *                                 type: integer
- *                                 nullable: true
- *                               operator:
+ *                               parkingSystemId:
+ *                                 type: integer
+ *                               carId:
+ *                                 type: integer
+ *                               project:
  *                                 type: object
  *                                 nullable: true
  *                                 properties:
  *                                   id:
  *                                     type: integer
- *                                   user:
- *                                     type: object
- *                                     nullable: true
- *                                     properties:
- *                                       id:
- *                                         type: integer
- *                                       username:
- *                                         type: string
+ *                                   projectName:
+ *                                     type: string
+ *                                   societyName:
+ *                                     type: string
+ *                               parkingSystem:
+ *                                 type: object
+ *                                 nullable: true
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   wingName:
+ *                                     type: string
+ *                                   type:
+ *                                     type: string
+ *                               car:
+ *                                 type: object
+ *                                 nullable: true
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   carType:
+ *                                     type: string
+ *                                   carModel:
+ *                                     type: string
+ *                                   carCompany:
+ *                                     type: string
+ *                                   carNumber:
+ *                                     type: string
  *                               status:
  *                                 type: string
  *                                 enum: [Pending, Accepted, Started, Cancelled]
@@ -583,7 +606,7 @@ router.get('/car/available', authenticate, customerController.getAvailableCarLis
  *                               waitingNumber:
  *                                 type: integer
  *                                 nullable: true
- *                                 description: Number of release requests ahead of this request for the same operator (only included if request exists)
+ *                                 description: Number of release requests ahead of this request for the same project and parking system (only included if request exists)
  *                                 example: 3
  *                               createdAt:
  *                                 type: string
@@ -652,21 +675,50 @@ router.get('/pallet-status', authenticate, customerController.getCustomerPalletS
  *                           type: integer
  *                         palletAllotmentId:
  *                           type: integer
- *                         operatorId:
+ *                         projectId:
  *                           type: integer
- *                         operator:
+ *                         parkingSystemId:
+ *                           type: integer
+ *                         carId:
+ *                           type: integer
+ *                         project:
  *                           type: object
  *                           nullable: true
  *                           properties:
  *                             id:
  *                               type: integer
- *                             user:
- *                               type: object
- *                               properties:
- *                                 id:
- *                                   type: integer
- *                                 username:
- *                                   type: string
+ *                             projectName:
+ *                               type: string
+ *                             societyName:
+ *                               type: string
+ *                         parkingSystem:
+ *                           type: object
+ *                           nullable: true
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             wingName:
+ *                               type: string
+ *                             type:
+ *                               type: string
+ *                             level:
+ *                               type: integer
+ *                             column:
+ *                               type: integer
+ *                         car:
+ *                           type: object
+ *                           nullable: true
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             carType:
+ *                               type: string
+ *                             carModel:
+ *                               type: string
+ *                             carCompany:
+ *                               type: string
+ *                             carNumber:
+ *                               type: string
  *                         status:
  *                           type: string
  *                           enum: [Pending, Accepted, Started, Completed, Cancelled]
@@ -686,7 +738,7 @@ router.get('/pallet-status', authenticate, customerController.getCustomerPalletS
  *                           example: "18 minutes 30 seconds"
  *                         waitingNumber:
  *                           type: integer
- *                           description: Number of release requests ahead of this request for the same operator
+ *                           description: Number of release requests ahead of this request for the same project and parking system
  *                           example: 3
  *                         createdAt:
  *                           type: string
@@ -723,6 +775,9 @@ router.get('/pallet-status', authenticate, customerController.getCustomerPalletS
  *                               type: integer
  *                             timeForHorizontalMove:
  *                               type: integer
+ *                             bufferTime:
+ *                               type: integer
+ *                               description: Buffer time in seconds
  *                         project:
  *                           type: object
  *                           properties:
@@ -855,23 +910,50 @@ router.post('/release-car-request', authenticate, validateRequestCarRelease, cus
  *                                     type: string
  *                                   societyName:
  *                                     type: string
- *                           operatorId:
+ *                           projectId:
  *                             type: integer
- *                             nullable: true
- *                           operator:
+ *                           parkingSystemId:
+ *                             type: integer
+ *                           carId:
+ *                             type: integer
+ *                           project:
  *                             type: object
  *                             nullable: true
  *                             properties:
  *                               id:
  *                                 type: integer
- *                               user:
- *                                 type: object
- *                                 nullable: true
- *                                 properties:
- *                                   id:
- *                                     type: integer
- *                                   username:
- *                                     type: string
+ *                               projectName:
+ *                                 type: string
+ *                               societyName:
+ *                                 type: string
+ *                           parkingSystem:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               wingName:
+ *                                 type: string
+ *                               type:
+ *                                 type: string
+ *                               level:
+ *                                 type: integer
+ *                               column:
+ *                                 type: integer
+ *                           car:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               carType:
+ *                                 type: string
+ *                               carModel:
+ *                                 type: string
+ *                               carCompany:
+ *                                 type: string
+ *                               carNumber:
+ *                                 type: string
  *                           status:
  *                             type: string
  *                             enum: [Pending, Accepted, Started, Completed, Cancelled]

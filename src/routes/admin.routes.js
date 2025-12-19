@@ -72,6 +72,9 @@ const { validateUpdatePalletPower } = require('../validators/operator.validator'
  *                                   type: integer
  *                                 timeForHorizontalMove:
  *                                   type: integer
+ *                                 bufferTime:
+ *                                   type: integer
+ *                                   description: Buffer time in seconds
  *                                 createdAt:
  *                                   type: string
  *                                   format: date-time
@@ -254,6 +257,12 @@ router.get('/customers', authorize('admin', 'operator'), customerController.getC
  *               level:
  *                 type: integer
  *                 minimum: 1
+ *                 description: Level above ground (used for both Tower and Puzzle)
+ *                 example: 3
+ *               levelBelowGround:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: Level below ground (required for Puzzle, should not be provided for Tower)
  *                 example: 3
  *               column:
  *                 type: integer
@@ -267,6 +276,11 @@ router.get('/customers', authorize('admin', 'operator'), customerController.getC
  *                 type: integer
  *                 minimum: 0
  *                 example: 10
+ *               bufferTime:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: Buffer time in seconds
+ *                 example: 5
  *     responses:
  *       201:
  *         description: Parking system created successfully
@@ -295,14 +309,22 @@ router.get('/customers', authorize('admin', 'operator'), customerController.getC
  *                           type: string
  *                         level:
  *                           type: integer
+ *                         levelBelowGround:
+ *                           type: integer
+ *                           nullable: true
+ *                           description: Level below ground (NULL for Tower)
  *                         column:
  *                           type: integer
  *                         totalNumberOfPallet:
  *                           type: integer
+ *                           description: Calculated as Level × Column for Tower, or ((Column-1) × Level) + 1 + (Column × LevelBelowGround) for Puzzle
  *                         timeForEachLevel:
  *                           type: integer
  *                         timeForHorizontalMove:
  *                           type: integer
+ *                         bufferTime:
+ *                           type: integer
+ *                           description: Buffer time in seconds
  *                         createdAt:
  *                           type: string
  *                           format: date-time
@@ -318,6 +340,79 @@ router.get('/customers', authorize('admin', 'operator'), customerController.getC
  *                           type: string
  *                         societyName:
  *                           type: string
+ *       400:
+ *         description: Validation error or project name already exists
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ */
+router.post('/create-parking-system', authorize('admin'), validateCreateParkingSystem, parkingSystemController.createParkingSystem);
+
+/**
+ * @swagger
+ * /api/admin/generate-pallets:
+ *   post:
+ *     summary: Generate pallets for a parking system (Admin only)
+ *     description: Automatically generates pallets for a parking system based on its configuration. Pallets will be numbered starting from the provided starting pallet number.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - parkingSystemId
+ *               - startingPalletNumber
+ *             properties:
+ *               parkingSystemId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: Parking System ID
+ *                 example: 1
+ *               startingPalletNumber:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: Starting pallet number for UserGivenPalletNumber
+ *                 example: 1
+ *     responses:
+ *       201:
+ *         description: Pallets generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     parkingSystem:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         wingName:
+ *                           type: string
+ *                         projectId:
+ *                           type: integer
+ *                         type:
+ *                           type: string
+ *                         level:
+ *                           type: integer
+ *                         levelBelowGround:
+ *                           type: integer
+ *                           nullable: true
+ *                         column:
+ *                           type: integer
+ *                         totalNumberOfPallet:
+ *                           type: integer
  *                     palletDetails:
  *                       type: array
  *                       items:
@@ -327,20 +422,28 @@ router.get('/customers', authorize('admin', 'operator'), customerController.getC
  *                             type: integer
  *                           level:
  *                             type: integer
+ *                             nullable: true
+ *                           levelBelowGround:
+ *                             type: integer
+ *                             nullable: true
  *                           column:
  *                             type: integer
  *                           userGivenPalletNumber:
  *                             type: string
  *                     totalPalletsCreated:
  *                       type: integer
+ *                     startingPalletNumber:
+ *                       type: integer
+ *                     endingPalletNumber:
+ *                       type: integer
  *       400:
- *         description: Validation error or project name already exists
+ *         description: Validation error, parking system not found, or pallets already exist
  *       401:
  *         description: Unauthorized
  *       403:
  *         description: Forbidden - Admin access required
  */
-router.post('/create-parking-system', authorize('admin'), validateCreateParkingSystem, parkingSystemController.createParkingSystem);
+router.post('/generate-pallets', authorize('admin'), parkingSystemController.generatePallets);
 
 /**
  * @swagger

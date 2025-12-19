@@ -428,6 +428,9 @@ router.get('/profile', authorize('operator'), operatorController.getOperatorProf
  *                             type: integer
  *                           timeForHorizontalMove:
  *                             type: integer
+ *                           bufferTime:
+ *                             type: integer
+ *                             description: Buffer time in seconds
  *                           createdAt:
  *                             type: string
  *                             format: date-time
@@ -726,6 +729,9 @@ router.post('/customer/approve', authorize('operator'), operatorController.appro
  *                           type: integer
  *                         timeForHorizontalMove:
  *                           type: integer
+ *                         bufferTime:
+ *                           type: integer
+ *                           description: Buffer time in seconds
  *                     palletDetails:
  *                       type: array
  *                       items:
@@ -1057,22 +1063,50 @@ router.post('/assign-pallet', authorize('operator'), validateAssignPallet, opera
  *                                     type: string
  *                                   societyName:
  *                                     type: string
- *                           operatorId:
+ *                           projectId:
  *                             type: integer
- *                           operator:
+ *                           parkingSystemId:
+ *                             type: integer
+ *                           carId:
+ *                             type: integer
+ *                           project:
  *                             type: object
  *                             nullable: true
  *                             properties:
  *                               id:
  *                                 type: integer
- *                               user:
- *                                 type: object
- *                                 nullable: true
- *                                 properties:
- *                                   id:
- *                                     type: integer
- *                                   username:
- *                                     type: string
+ *                               projectName:
+ *                                 type: string
+ *                               societyName:
+ *                                 type: string
+ *                           parkingSystem:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               wingName:
+ *                                 type: string
+ *                               type:
+ *                                 type: string
+ *                               level:
+ *                                 type: integer
+ *                               column:
+ *                                 type: integer
+ *                           car:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               carType:
+ *                                 type: string
+ *                               carModel:
+ *                                 type: string
+ *                               carCompany:
+ *                                 type: string
+ *                               carNumber:
+ *                                 type: string
  *                           status:
  *                             type: string
  *                             enum: [Pending, Accepted, Started, Completed, Cancelled]
@@ -1226,22 +1260,50 @@ router.get('/requests', authorize('operator'), operatorController.getOperatorReq
  *                                   type: string
  *                                 societyName:
  *                                   type: string
- *                         operatorId:
+ *                         projectId:
  *                           type: integer
- *                         operator:
+ *                         parkingSystemId:
+ *                           type: integer
+ *                         carId:
+ *                           type: integer
+ *                         project:
  *                           type: object
  *                           nullable: true
  *                           properties:
  *                             id:
  *                               type: integer
- *                             user:
- *                               type: object
- *                               nullable: true
- *                               properties:
- *                                 id:
- *                                   type: integer
- *                                 username:
- *                                   type: string
+ *                             projectName:
+ *                               type: string
+ *                             societyName:
+ *                               type: string
+ *                         parkingSystem:
+ *                           type: object
+ *                           nullable: true
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             wingName:
+ *                               type: string
+ *                             type:
+ *                               type: string
+ *                             level:
+ *                               type: integer
+ *                             column:
+ *                               type: integer
+ *                         car:
+ *                           type: object
+ *                           nullable: true
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             carType:
+ *                               type: string
+ *                             carModel:
+ *                               type: string
+ *                             carCompany:
+ *                               type: string
+ *                             carNumber:
+ *                               type: string
  *                         status:
  *                           type: string
  *                           enum: [Pending, Accepted, Started, Completed, Cancelled]

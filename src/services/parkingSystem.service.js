@@ -28,12 +28,22 @@ const createParkingSystem = async (parkingSystemData) => {
   
   const projectId = project.Id;
   
-  // Step 2: Calculate TotalNumberOfPallet
+  // Step 2: Calculate TotalNumberOfPallet based on type
   let totalNumberOfPallet = 0;
   if (parkingSystemData.Type === 'Tower') {
+    // Tower: Level × Column
     totalNumberOfPallet = parkingSystemData.Level * parkingSystemData.Column;
+  } else if (parkingSystemData.Type === 'Puzzle') {
+    // Puzzle: ((Column - 1) × LevelAboveGround) + 1 + (Column × LevelBelowGround)
+    const levelAboveGround = parkingSystemData.Level; // Level represents LevelAboveGround
+    const levelBelowGround = parkingSystemData.LevelBelowGround || 0;
+    totalNumberOfPallet = ((parkingSystemData.Column - 1) * levelAboveGround) + 1 + (parkingSystemData.Column * levelBelowGround);
   }
   
+  // Step 3: Validate Puzzle parking has LevelBelowGround
+  if (parkingSystemData.Type === 'Puzzle' && (!parkingSystemData.LevelBelowGround || parkingSystemData.LevelBelowGround < 0)) {
+    throw new Error('LevelBelowGround is required for Puzzle parking system');
+  }
   
   // Step 4: Create parking system
   const parkingSystem = await ParkingSystem.create({
@@ -41,51 +51,15 @@ const createParkingSystem = async (parkingSystemData) => {
     ProjectId: projectId,
     Type: parkingSystemData.Type,
     Level: parkingSystemData.Level,
+    LevelBelowGround: parkingSystemData.LevelBelowGround || null,
     Column: parkingSystemData.Column,
     TotalNumberOfPallet: totalNumberOfPallet,
     TimeForEachLevel: parkingSystemData.TimeForEachLevel || 0,
     TimeForHorizontalMove: parkingSystemData.TimeForHorizontalMove || 0,
+    BufferTime: parkingSystemData.BufferTime || 0,
     CreatedAt: istTime,
     UpdatedAt: istTime
   });
-  
-  const parkingSystemId = parkingSystem.Id;
-  
-  // Step 5: Create multiple pallet details entries
-  const palletDetails = [];
-
-  // Determine starting pallet number for this project (increment per project)
-  const lastPallet = await PalletAllotment.findOne({
-    where: { ProjectId: projectId },
-    order: [[sequelize.literal('CAST("UserGivenPalletNumber" AS INTEGER)'), 'DESC']]
-  });
-  let userGivenPalletNumber = lastPallet ? (parseInt(lastPallet.UserGivenPalletNumber, 10) + 1) : 1;
-  
-  for (let currentLevel = 1; currentLevel <= parkingSystemData.Level; currentLevel++) {
-    for (let currentColumn = 1; currentColumn <= parkingSystemData.Column; currentColumn++) {
-      const palletDetail = await PalletAllotment.create({
-        UserId: 0,
-        ParkingSystemId: parkingSystemId,
-        ProjectId: projectId,
-        Level: currentLevel,
-        Column: currentColumn,
-        UserGivenPalletNumber: userGivenPalletNumber.toString(),
-        CarId: null, // CarId will be set when a car is assigned
-        Status: 'Released',
-        CreatedAt: istTime,
-        UpdatedAt: istTime
-      });
-      
-      palletDetails.push({
-        id: palletDetail.Id,
-        level: palletDetail.Level,
-        column: palletDetail.Column,
-        userGivenPalletNumber: palletDetail.UserGivenPalletNumber
-      });
-      
-      userGivenPalletNumber++;
-    }
-  }
   
   return {
     parkingSystem: {
@@ -94,10 +68,12 @@ const createParkingSystem = async (parkingSystemData) => {
       projectId: parkingSystem.ProjectId,
       type: parkingSystem.Type,
       level: parkingSystem.Level,
+      levelBelowGround: parkingSystem.LevelBelowGround,
       column: parkingSystem.Column,
       totalNumberOfPallet: parkingSystem.TotalNumberOfPallet,
       timeForEachLevel: parkingSystem.TimeForEachLevel,
       timeForHorizontalMove: parkingSystem.TimeForHorizontalMove,
+      bufferTime: parkingSystem.BufferTime,
       createdAt: parkingSystem.CreatedAt,
       updatedAt: parkingSystem.UpdatedAt
     },
@@ -105,9 +81,7 @@ const createParkingSystem = async (parkingSystemData) => {
       id: project.Id,
       projectName: project.ProjectName,
       societyName: project.SocietyName
-    },
-    palletDetails: palletDetails,
-    totalPalletsCreated: palletDetails.length
+    }
   };
 };
 
@@ -129,6 +103,7 @@ const getProjectListWithParkingSystems = async () => {
           'TotalNumberOfPallet',
           'TimeForEachLevel',
           'TimeForHorizontalMove',
+          'BufferTime',
           'CreatedAt',
           'UpdatedAt'
         ]
@@ -153,6 +128,7 @@ const getProjectListWithParkingSystems = async () => {
       totalNumberOfPallet: parkingSystem.TotalNumberOfPallet,
       timeForEachLevel: parkingSystem.TimeForEachLevel,
       timeForHorizontalMove: parkingSystem.TimeForHorizontalMove,
+      bufferTime: parkingSystem.BufferTime,
       createdAt: parkingSystem.CreatedAt,
       updatedAt: parkingSystem.UpdatedAt
     })) : []
@@ -230,7 +206,8 @@ const getPalletDetails = async (projectId, parkingSystemId) => {
       column: parkingSystem.Column,
       totalNumberOfPallet: parkingSystem.TotalNumberOfPallet,
       timeForEachLevel: parkingSystem.TimeForEachLevel,
-      timeForHorizontalMove: parkingSystem.TimeForHorizontalMove
+      timeForHorizontalMove: parkingSystem.TimeForHorizontalMove,
+      bufferTime: parkingSystem.BufferTime
     },
     palletDetails: palletDetails.map(pallet => ({
       id: pallet.Id,
@@ -260,9 +237,181 @@ const getPalletDetails = async (projectId, parkingSystemId) => {
   };
 };
 
+// Generate Pallets for Parking System Service
+const generatePallets = async (parkingSystemId, startingPalletNumber) => {
+  // Step 1: Validate parking system exists
+  const parkingSystem = await ParkingSystem.findByPk(parkingSystemId);
+  if (!parkingSystem) {
+    throw new Error('Parking system not found');
+  }
+
+  // Step 2: Check if pallets already exist for this parking system
+  const existingPallets = await PalletAllotment.count({
+    where: {
+      ParkingSystemId: parkingSystemId
+    }
+  });
+
+  if (existingPallets > 0) {
+    throw new Error('Pallets already exist for this parking system');
+  }
+
+  // Step 3: Validate starting pallet number
+  if (!startingPalletNumber || startingPalletNumber < 1) {
+    throw new Error('Starting pallet number must be a positive integer');
+  }
+
+  const istTime = getISTTime();
+  const palletDetails = [];
+  let currentPalletNumber = startingPalletNumber;
+
+  // Step 4: Generate pallets based on parking system type
+  if (parkingSystem.Type === 'Tower') {
+    // Tower: Generate pallets for Level × Column
+    for (let currentLevel = 1; currentLevel <= parkingSystem.Level; currentLevel++) {
+      for (let currentColumn = 1; currentColumn <= parkingSystem.Column; currentColumn++) {
+        const palletDetail = await PalletAllotment.create({
+          UserId: 0,
+          ParkingSystemId: parkingSystemId,
+          ProjectId: parkingSystem.ProjectId,
+          Level: currentLevel,
+          LevelBelowGround: null,
+          Column: currentColumn,
+          UserGivenPalletNumber: currentPalletNumber.toString(),
+          CarId: null,
+          Status: 'Released',
+          CreatedAt: istTime,
+          UpdatedAt: istTime
+        });
+        
+        palletDetails.push({
+          id: palletDetail.Id,
+          level: palletDetail.Level,
+          levelBelowGround: palletDetail.LevelBelowGround,
+          column: palletDetail.Column,
+          userGivenPalletNumber: palletDetail.UserGivenPalletNumber
+        });
+        
+        currentPalletNumber++;
+      }
+    }
+  } else if (parkingSystem.Type === 'Puzzle') {
+    // Puzzle: Generate pallets based on formula
+    // Formula: ((Column - 1) × LevelAboveGround) + 1 + (Column × LevelBelowGround)
+    const levelAboveGround = parkingSystem.Level;
+    const levelBelowGround = parkingSystem.LevelBelowGround || 0;
+
+    // Generate pallets for above ground levels
+    // Pattern: (Column - 1) × LevelAboveGround pallets + 1 special pallet
+    for (let currentLevel = 1; currentLevel <= levelAboveGround; currentLevel++) {
+      for (let currentColumn = 1; currentColumn < parkingSystem.Column; currentColumn++) {
+        // Create (Column - 1) pallets for each level
+        const palletDetail = await PalletAllotment.create({
+          UserId: 0,
+          ParkingSystemId: parkingSystemId,
+          ProjectId: parkingSystem.ProjectId,
+          Level: currentLevel,
+          LevelBelowGround: null,
+          Column: currentColumn,
+          UserGivenPalletNumber: currentPalletNumber.toString(),
+          CarId: null,
+          Status: 'Released',
+          CreatedAt: istTime,
+          UpdatedAt: istTime
+        });
+        
+        palletDetails.push({
+          id: palletDetail.Id,
+          level: palletDetail.Level,
+          levelBelowGround: palletDetail.LevelBelowGround,
+          column: palletDetail.Column,
+          userGivenPalletNumber: palletDetail.UserGivenPalletNumber
+        });
+        
+        currentPalletNumber++;
+      }
+    }
+
+    // Add the special +1 pallet (last column of first level)
+    if (levelAboveGround > 0) {
+      const specialPallet = await PalletAllotment.create({
+        UserId: 0,
+        ParkingSystemId: parkingSystemId,
+        ProjectId: parkingSystem.ProjectId,
+        Level: 1,
+        LevelBelowGround: null,
+        Column: parkingSystem.Column,
+        UserGivenPalletNumber: currentPalletNumber.toString(),
+        CarId: null,
+        Status: 'Released',
+        CreatedAt: istTime,
+        UpdatedAt: istTime
+      });
+      
+      palletDetails.push({
+        id: specialPallet.Id,
+        level: specialPallet.Level,
+        levelBelowGround: specialPallet.LevelBelowGround,
+        column: specialPallet.Column,
+        userGivenPalletNumber: specialPallet.UserGivenPalletNumber
+      });
+      
+      currentPalletNumber++;
+    }
+
+    // Generate pallets for below ground levels
+    // Pattern: Column × LevelBelowGround pallets
+    for (let currentLevelBelow = 1; currentLevelBelow <= levelBelowGround; currentLevelBelow++) {
+      for (let currentColumn = 1; currentColumn <= parkingSystem.Column; currentColumn++) {
+        const palletDetail = await PalletAllotment.create({
+          UserId: 0,
+          ParkingSystemId: parkingSystemId,
+          ProjectId: parkingSystem.ProjectId,
+          Level: null, // No level above ground for below ground pallets
+          LevelBelowGround: currentLevelBelow,
+          Column: currentColumn,
+          UserGivenPalletNumber: currentPalletNumber.toString(),
+          CarId: null,
+          Status: 'Released',
+          CreatedAt: istTime,
+          UpdatedAt: istTime
+        });
+        
+        palletDetails.push({
+          id: palletDetail.Id,
+          level: palletDetail.Level,
+          levelBelowGround: palletDetail.LevelBelowGround,
+          column: palletDetail.Column,
+          userGivenPalletNumber: palletDetail.UserGivenPalletNumber
+        });
+        
+        currentPalletNumber++;
+      }
+    }
+  }
+
+  return {
+    parkingSystem: {
+      id: parkingSystem.Id,
+      wingName: parkingSystem.WingName,
+      projectId: parkingSystem.ProjectId,
+      type: parkingSystem.Type,
+      level: parkingSystem.Level,
+      levelBelowGround: parkingSystem.LevelBelowGround,
+      column: parkingSystem.Column,
+      totalNumberOfPallet: parkingSystem.TotalNumberOfPallet
+    },
+    palletDetails: palletDetails,
+    totalPalletsCreated: palletDetails.length,
+    startingPalletNumber: startingPalletNumber,
+    endingPalletNumber: currentPalletNumber - 1
+  };
+};
+
 module.exports = {
   createParkingSystem,
   getProjectListWithParkingSystems,
-  getPalletDetails
+  getPalletDetails,
+  generatePallets
 };
 

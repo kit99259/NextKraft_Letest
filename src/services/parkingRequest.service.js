@@ -26,24 +26,33 @@ const createParkingRequest = async (userId, carId) => {
     throw new Error('Customer profile not found');
   }
 
-  // Find operator assigned to same project and parking system (approved)
+  // Validate customer has project and parking system assigned
+  if (!customer.ProjectId || !customer.ParkingSystemId) {
+    throw new Error('Customer is not assigned to a project and parking system');
+  }
+
+  // Find operator assigned to same project and parking system (approved) for notification
   const operator = await Operator.findOne({
     where: {
       ProjectId: customer.ProjectId,
       ParkingSystemId: customer.ParkingSystemId,
       Status: 'Approved'
-    }
+    },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username']
+      }
+    ]
   });
-
-  if (!operator) {
-    throw new Error('No operator assigned to this parking system');
-  }
 
   const istTime = getISTTime();
 
   const parkingRequest = await ParkingRequest.create({
     UserId: userId,
-    OperatorId: operator.Id,
+    ProjectId: customer.ProjectId,
+    ParkingSystemId: customer.ParkingSystemId,
     CarId: car.Id,
     Status: 'Pending',
     CreatedAt: istTime,
@@ -59,16 +68,14 @@ const createParkingRequest = async (userId, carId) => {
         attributes: ['Id', 'Username', 'Role']
       },
       {
-        model: Operator,
-        as: 'operator',
-        attributes: ['Id', 'ProjectId', 'ParkingSystemId', 'Status'],
-        include: [
-          {
-            model: User,
-            as: 'user',
-            attributes: ['Id', 'Username']
-          }
-        ]
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
       },
       {
         model: Car,
@@ -78,8 +85,8 @@ const createParkingRequest = async (userId, carId) => {
     ]
   });
 
-  // Notify operator
-  if (parkingRequest.operator && parkingRequest.operator.user) {
+  // Notify operator (if operator exists for this project/parking system)
+  if (operator && operator.user) {
     const carInfo = parkingRequest.car
       ? `${parkingRequest.car.CarCompany} ${parkingRequest.car.CarModel} (${parkingRequest.car.CarNumber})`
       : 'a car';
@@ -104,14 +111,21 @@ const createParkingRequest = async (userId, carId) => {
       username: parkingRequest.user.Username,
       role: parkingRequest.user.Role
     } : null,
-    operatorId: parkingRequest.OperatorId,
-    operator: parkingRequest.operator ? {
-      id: parkingRequest.operator.Id,
-      projectId: parkingRequest.operator.ProjectId,
-      parkingSystemId: parkingRequest.operator.ParkingSystemId,
-      status: parkingRequest.operator.Status
-    } : null,
+    projectId: parkingRequest.ProjectId,
+    parkingSystemId: parkingRequest.ParkingSystemId,
     carId: parkingRequest.CarId,
+    project: parkingRequest.project ? {
+      id: parkingRequest.project.Id,
+      projectName: parkingRequest.project.ProjectName,
+      societyName: parkingRequest.project.SocietyName
+    } : null,
+    parkingSystem: parkingRequest.parkingSystem ? {
+      id: parkingRequest.parkingSystem.Id,
+      wingName: parkingRequest.parkingSystem.WingName,
+      type: parkingRequest.parkingSystem.Type,
+      level: parkingRequest.parkingSystem.Level,
+      column: parkingRequest.parkingSystem.Column
+    } : null,
     car: parkingRequest.car ? {
       id: parkingRequest.car.Id,
       userId: parkingRequest.car.UserId,
@@ -133,8 +147,16 @@ const getOperatorParkingRequests = async (operatorUserId) => {
     throw new Error('Operator profile not found');
   }
 
+  // Validate operator has project and parking system assigned
+  if (!operator.ProjectId || !operator.ParkingSystemId) {
+    throw new Error('Operator is not assigned to a project and parking system');
+  }
+
   const requests = await ParkingRequest.findAll({
-    where: { OperatorId: operator.Id },
+    where: {
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId
+    },
     include: [
       {
         model: User,
@@ -158,7 +180,8 @@ const getOperatorParkingRequests = async (operatorUserId) => {
       username: req.user.Username,
       role: req.user.Role
     } : null,
-    operatorId: req.OperatorId,
+    projectId: req.ProjectId,
+    parkingSystemId: req.ParkingSystemId,
     carId: req.CarId,
     car: req.car ? {
       id: req.car.Id,
@@ -181,8 +204,17 @@ const updateParkingRequestStatus = async (operatorUserId, parkingRequestId, newS
     throw new Error('Operator profile not found');
   }
 
+  // Validate operator has project and parking system assigned
+  if (!operator.ProjectId || !operator.ParkingSystemId) {
+    throw new Error('Operator is not assigned to a project and parking system');
+  }
+
   const parkingRequest = await ParkingRequest.findOne({
-    where: { Id: parkingRequestId, OperatorId: operator.Id }
+    where: {
+      Id: parkingRequestId,
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId
+    }
   });
 
   if (!parkingRequest) {
@@ -222,7 +254,8 @@ const updateParkingRequestStatus = async (operatorUserId, parkingRequestId, newS
   return {
     id: parkingRequest.Id,
     userId: parkingRequest.UserId,
-    operatorId: parkingRequest.OperatorId,
+    projectId: parkingRequest.ProjectId,
+    parkingSystemId: parkingRequest.ParkingSystemId,
     carId: parkingRequest.CarId,
     status: parkingRequest.Status,
     createdAt: parkingRequest.CreatedAt,

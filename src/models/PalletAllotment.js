@@ -30,7 +30,13 @@ const PalletAllotment = sequelize.define('PalletAllotment', {
   },
   Level: {
     type: DataTypes.INTEGER,
-    allowNull: false
+    allowNull: false,
+    comment: 'Level above ground (used for both Tower and Puzzle)'
+  },
+  LevelBelowGround: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'Level below ground (used for Puzzle parking only, NULL for Tower)'
   },
   Column: {
     type: DataTypes.INTEGER,

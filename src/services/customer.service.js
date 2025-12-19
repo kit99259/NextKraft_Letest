@@ -337,17 +337,19 @@ const getCustomerPalletStatus = async (userId) => {
       },
       include: [
         {
-          model: Operator,
-          as: 'operator',
-          attributes: ['Id'],
-          include: [
-            {
-              model: User,
-              as: 'user',
-              attributes: ['Id', 'Username']
-            }
-          ],
-          required: false
+          model: Project,
+          as: 'project',
+          attributes: ['Id', 'ProjectName', 'SocietyName']
+        },
+        {
+          model: ParkingSystem,
+          as: 'parkingSystem',
+          attributes: ['Id', 'WingName', 'Type']
+        },
+        {
+          model: Car,
+          as: 'car',
+          attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
         }
       ],
       order: [['CreatedAt', 'DESC']]
@@ -362,37 +364,44 @@ const getCustomerPalletStatus = async (userId) => {
   }
 
   // Calculate waiting number for each request
-  // Get all operator IDs from the requests
-  const operatorIds = Array.from(requestsMap.values())
-    .map(req => req.OperatorId)
-    .filter(id => id !== null && id !== undefined);
+  // Get unique ProjectId and ParkingSystemId combinations from the requests
+  const projectParkingSystemKeys = Array.from(requestsMap.values())
+    .map(req => req.ProjectId && req.ParkingSystemId ? `${req.ProjectId}_${req.ParkingSystemId}` : null)
+    .filter(key => key !== null);
 
-  // Get all non-completed requests for these operators to calculate waiting numbers
-  const allOperatorRequests = operatorIds.length > 0 ? await Request.findAll({
+  // Get all non-completed requests for these project/parking system combinations to calculate waiting numbers
+  const allProjectParkingSystemRequests = projectParkingSystemKeys.length > 0 ? await Request.findAll({
     where: {
-      OperatorId: { [Op.in]: operatorIds },
       Status: { [Op.ne]: 'Completed' }
     },
-    attributes: ['Id', 'OperatorId', 'CreatedAt'],
+    attributes: ['Id', 'ProjectId', 'ParkingSystemId', 'CreatedAt'],
     order: [['CreatedAt', 'ASC']]
   }) : [];
 
-  // Group requests by operator ID
-  const requestsByOperator = new Map();
-  allOperatorRequests.forEach(req => {
-    if (!requestsByOperator.has(req.OperatorId)) {
-      requestsByOperator.set(req.OperatorId, []);
+  // Filter to only include requests matching our project/parking system combinations
+  const filteredRequests = allProjectParkingSystemRequests.filter(req => {
+    const key = `${req.ProjectId}_${req.ParkingSystemId}`;
+    return projectParkingSystemKeys.includes(key);
+  });
+
+  // Group requests by ProjectId and ParkingSystemId combination
+  const requestsByProjectParkingSystem = new Map();
+  filteredRequests.forEach(req => {
+    const key = `${req.ProjectId}_${req.ParkingSystemId}`;
+    if (!requestsByProjectParkingSystem.has(key)) {
+      requestsByProjectParkingSystem.set(key, []);
     }
-    requestsByOperator.get(req.OperatorId).push(req);
+    requestsByProjectParkingSystem.get(key).push(req);
   });
 
   // Calculate waiting number for each request
   const waitingNumbersMap = new Map();
   requestsMap.forEach((request, palletId) => {
-    if (request && request.OperatorId) {
-      const operatorRequests = requestsByOperator.get(request.OperatorId) || [];
+    if (request && request.ProjectId && request.ParkingSystemId) {
+      const key = `${request.ProjectId}_${request.ParkingSystemId}`;
+      const projectParkingSystemRequests = requestsByProjectParkingSystem.get(key) || [];
       // Count requests created before this request
-      const waitingNumber = operatorRequests.filter(req => 
+      const waitingNumber = projectParkingSystemRequests.filter(req => 
         req.CreatedAt < request.CreatedAt
       ).length;
       waitingNumbersMap.set(palletId, waitingNumber);
@@ -443,13 +452,25 @@ const getCustomerPalletStatus = async (userId) => {
         id: request.Id,
         userId: request.UserId,
         palletAllotmentId: request.PalletAllotmentId,
-        operatorId: request.OperatorId,
-        operator: request.operator ? {
-          id: request.operator.Id,
-          user: request.operator.user ? {
-            id: request.operator.user.Id,
-            username: request.operator.user.Username
-          } : null
+        projectId: request.ProjectId,
+        parkingSystemId: request.ParkingSystemId,
+        carId: request.CarId,
+        project: request.project ? {
+          id: request.project.Id,
+          projectName: request.project.ProjectName,
+          societyName: request.project.SocietyName
+        } : null,
+        parkingSystem: request.parkingSystem ? {
+          id: request.parkingSystem.Id,
+          wingName: request.parkingSystem.WingName,
+          type: request.parkingSystem.Type
+        } : null,
+        car: request.car ? {
+          id: request.car.Id,
+          carType: request.car.CarType,
+          carModel: request.car.CarModel,
+          carCompany: request.car.CarCompany,
+          carNumber: request.car.CarNumber
         } : null,
         status: request.Status,
         estimatedTime: request.EstimatedTime,
@@ -477,7 +498,7 @@ const requestCarRelease = async (userId, palletId) => {
       {
         model: ParkingSystem,
         as: 'parkingSystem',
-        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column', 'TimeForEachLevel', 'TimeForHorizontalMove', 'ProjectId']
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column', 'TimeForEachLevel', 'TimeForHorizontalMove', 'BufferTime', 'ProjectId']
       },
       {
         model: Project,
@@ -530,9 +551,9 @@ const requestCarRelease = async (userId, palletId) => {
   }
 
   // Step 4: Calculate estimated time to bring down the car
-  // Estimated time = (Level * TimeForEachLevel) + TimeForHorizontalMove
+  // Estimated time = (Level * TimeForEachLevel) + TimeForHorizontalMove + BufferTime
   // Level is the pallet's level, TimeForEachLevel is from parking system
-  const estimatedTime = (pallet.Level * pallet.parkingSystem.TimeForEachLevel) + pallet.parkingSystem.TimeForHorizontalMove;
+  const estimatedTime = (pallet.Level * pallet.parkingSystem.TimeForEachLevel) + pallet.parkingSystem.TimeForHorizontalMove + (pallet.parkingSystem.BufferTime || 0);
 
   // Step 5: Create request entry
   const istTime = getISTTime();
@@ -540,7 +561,9 @@ const requestCarRelease = async (userId, palletId) => {
   const request = await Request.create({
     UserId: userId,
     PalletAllotmentId: palletId,
-    OperatorId: operator.Id,
+    ProjectId: pallet.ProjectId,
+    ParkingSystemId: pallet.ParkingSystemId,
+    CarId: pallet.CarId,
     Status: 'Pending',
     EstimatedTime: estimatedTime,
     CreatedAt: istTime,
@@ -548,10 +571,11 @@ const requestCarRelease = async (userId, palletId) => {
   });
 
   // Step 5.1: Calculate total estimated time including waiting requests
-  // Find all non-completed requests for the same operator created before this request
+  // Find all non-completed requests for the same project and parking system created before this request
   const waitingRequests = await Request.findAll({
     where: {
-      OperatorId: operator.Id,
+      ProjectId: pallet.ProjectId,
+      ParkingSystemId: pallet.ParkingSystemId,
       Status: { [Op.ne]: 'Completed' },
       CreatedAt: { [Op.lt]: istTime } // Created before this request
     },
@@ -568,16 +592,19 @@ const requestCarRelease = async (userId, palletId) => {
   await request.reload({
     include: [
       {
-        model: Operator,
-        as: 'operator',
-        attributes: ['Id'],
-        include: [
-          {
-            model: User,
-            as: 'user',
-            attributes: ['Id', 'Username']
-          }
-        ]
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      },
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
       },
       {
         model: PalletAllotment,
@@ -624,13 +651,27 @@ const requestCarRelease = async (userId, palletId) => {
       id: request.Id,
       userId: request.UserId,
       palletAllotmentId: request.PalletAllotmentId,
-      operatorId: request.OperatorId,
-      operator: request.operator ? {
-        id: request.operator.Id,
-        user: request.operator.user ? {
-          id: request.operator.user.Id,
-          username: request.operator.user.Username
-        } : null
+      projectId: request.ProjectId,
+      parkingSystemId: request.ParkingSystemId,
+      carId: request.CarId,
+      project: request.project ? {
+        id: request.project.Id,
+        projectName: request.project.ProjectName,
+        societyName: request.project.SocietyName
+      } : null,
+      parkingSystem: request.parkingSystem ? {
+        id: request.parkingSystem.Id,
+        wingName: request.parkingSystem.WingName,
+        type: request.parkingSystem.Type,
+        level: request.parkingSystem.Level,
+        column: request.parkingSystem.Column
+      } : null,
+      car: request.car ? {
+        id: request.car.Id,
+        carType: request.car.CarType,
+        carModel: request.car.CarModel,
+        carCompany: request.car.CarCompany,
+        carNumber: request.car.CarNumber
       } : null,
       status: request.Status,
       estimatedTime: request.EstimatedTime,
@@ -653,7 +694,8 @@ const requestCarRelease = async (userId, palletId) => {
         level: pallet.parkingSystem.Level,
         column: pallet.parkingSystem.Column,
         timeForEachLevel: pallet.parkingSystem.TimeForEachLevel,
-        timeForHorizontalMove: pallet.parkingSystem.TimeForHorizontalMove
+        timeForHorizontalMove: pallet.parkingSystem.TimeForHorizontalMove,
+        bufferTime: pallet.parkingSystem.BufferTime
       } : null,
       project: pallet.project ? {
         id: pallet.project.Id,
@@ -709,17 +751,19 @@ const getCustomerRequests = async (userId) => {
         ]
       },
       {
-        model: Operator,
-        as: 'operator',
-        attributes: ['Id'],
-        include: [
-          {
-            model: User,
-            as: 'user',
-            attributes: ['Id', 'Username']
-          }
-        ],
-        required: false
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      },
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
       }
     ],
     order: [['CreatedAt', 'DESC']] // Order by creation date descending (newest first)
@@ -760,13 +804,27 @@ const getCustomerRequests = async (userId) => {
         societyName: request.palletAllotment.project.SocietyName
       } : null
     } : null,
-    operatorId: request.OperatorId,
-    operator: request.operator ? {
-      id: request.operator.Id,
-      user: request.operator.user ? {
-        id: request.operator.user.Id,
-        username: request.operator.user.Username
-      } : null
+    projectId: request.ProjectId,
+    parkingSystemId: request.ParkingSystemId,
+    carId: request.CarId,
+    project: request.project ? {
+      id: request.project.Id,
+      projectName: request.project.ProjectName,
+      societyName: request.project.SocietyName
+    } : null,
+    parkingSystem: request.parkingSystem ? {
+      id: request.parkingSystem.Id,
+      wingName: request.parkingSystem.WingName,
+      type: request.parkingSystem.Type,
+      level: request.parkingSystem.Level,
+      column: request.parkingSystem.Column
+    } : null,
+    car: request.car ? {
+      id: request.car.Id,
+      carType: request.car.CarType,
+      carModel: request.car.CarModel,
+      carCompany: request.car.CarCompany,
+      carNumber: request.car.CarNumber
     } : null,
     status: request.Status,
     estimatedTime: request.EstimatedTime,

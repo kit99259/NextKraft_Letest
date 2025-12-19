@@ -275,6 +275,7 @@ const getOperatorProjectWithParkingSystems = async (userId) => {
       'TotalNumberOfPallet',
       'TimeForEachLevel',
       'TimeForHorizontalMove',
+      'BufferTime',
       'CreatedAt',
       'UpdatedAt'
     ],
@@ -299,6 +300,7 @@ const getOperatorProjectWithParkingSystems = async (userId) => {
       totalNumberOfPallet: parkingSystem.TotalNumberOfPallet,
       timeForEachLevel: parkingSystem.TimeForEachLevel,
       timeForHorizontalMove: parkingSystem.TimeForHorizontalMove,
+      bufferTime: parkingSystem.BufferTime,
       createdAt: parkingSystem.CreatedAt,
       updatedAt: parkingSystem.UpdatedAt
     })),
@@ -545,10 +547,16 @@ const getOperatorRequests = async (operatorUserId) => {
     throw new Error('Operator profile not found');
   }
 
-  // Step 2: Find all requests assigned to this operator
+  // Step 2: Validate operator has project and parking system assigned
+  if (!operator.ProjectId || !operator.ParkingSystemId) {
+    throw new Error('Operator is not assigned to a project and parking system');
+  }
+
+  // Step 3: Find all requests for this operator's project and parking system
   const requests = await Request.findAll({
     where: {
-      OperatorId: operator.Id
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId
     },
     include: [
       {
@@ -586,16 +594,19 @@ const getOperatorRequests = async (operatorUserId) => {
         ]
       },
       {
-        model: Operator,
-        as: 'operator',
-        attributes: ['Id'],
-        include: [
-          {
-            model: User,
-            as: 'user',
-            attributes: ['Id', 'Username']
-          }
-        ]
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      },
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
       }
     ],
     order: [
@@ -643,13 +654,27 @@ const getOperatorRequests = async (operatorUserId) => {
         societyName: request.palletAllotment.project.SocietyName
       } : null
     } : null,
-    operatorId: request.OperatorId,
-    operator: request.operator ? {
-      id: request.operator.Id,
-      user: request.operator.user ? {
-        id: request.operator.user.Id,
-        username: request.operator.user.Username
-      } : null
+    projectId: request.ProjectId,
+    parkingSystemId: request.ParkingSystemId,
+    carId: request.CarId,
+    project: request.project ? {
+      id: request.project.Id,
+      projectName: request.project.ProjectName,
+      societyName: request.project.SocietyName
+    } : null,
+    parkingSystem: request.parkingSystem ? {
+      id: request.parkingSystem.Id,
+      wingName: request.parkingSystem.WingName,
+      type: request.parkingSystem.Type,
+      level: request.parkingSystem.Level,
+      column: request.parkingSystem.Column
+    } : null,
+    car: request.car ? {
+      id: request.car.Id,
+      carType: request.car.CarType,
+      carModel: request.car.CarModel,
+      carCompany: request.car.CarCompany,
+      carNumber: request.car.CarNumber
     } : null,
     status: request.Status,
     estimatedTime: request.EstimatedTime,
@@ -670,11 +695,17 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
     throw new Error('Operator profile not found');
   }
 
-  // Step 2: Find the request
+  // Step 2: Validate operator has project and parking system assigned
+  if (!operator.ProjectId || !operator.ParkingSystemId) {
+    throw new Error('Operator is not assigned to a project and parking system');
+  }
+
+  // Step 3: Find the request and validate it belongs to operator's project and parking system
   const request = await Request.findOne({
     where: {
       Id: requestId,
-      OperatorId: operator.Id
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId
     },
     include: [
       {
@@ -733,7 +764,9 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
     await RequestQueue.create({
       UserId: request.UserId,
       PalletAllotmentId: request.PalletAllotmentId,
-      OperatorId: request.OperatorId,
+      ProjectId: request.ProjectId,
+      ParkingSystemId: request.ParkingSystemId,
+      CarId: request.CarId,
       Status: request.Status,
       EstimatedTime: request.EstimatedTime,
       CreatedAt: request.CreatedAt,
@@ -758,6 +791,21 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
         attributes: ['Id', 'Username', 'Role']
       },
       {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      },
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+      },
+      {
         model: PalletAllotment,
         as: 'palletAllotment',
         attributes: ['Id', 'UserId', 'CarId', 'Status', 'Level', 'Column', 'UserGivenPalletNumber'],
@@ -777,18 +825,6 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
             model: Project,
             as: 'project',
             attributes: ['Id', 'ProjectName', 'SocietyName']
-          }
-        ]
-      },
-      {
-        model: Operator,
-        as: 'operator',
-        attributes: ['Id'],
-        include: [
-          {
-            model: User,
-            as: 'user',
-            attributes: ['Id', 'Username']
           }
         ]
       }
@@ -856,13 +892,27 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
           societyName: request.palletAllotment.project.SocietyName
         } : null
       } : null,
-      operatorId: request.OperatorId,
-      operator: request.operator ? {
-        id: request.operator.Id,
-        user: request.operator.user ? {
-          id: request.operator.user.Id,
-          username: request.operator.user.Username
-        } : null
+      projectId: request.ProjectId,
+      parkingSystemId: request.ParkingSystemId,
+      carId: request.CarId,
+      project: request.project ? {
+        id: request.project.Id,
+        projectName: request.project.ProjectName,
+        societyName: request.project.SocietyName
+      } : null,
+      parkingSystem: request.parkingSystem ? {
+        id: request.parkingSystem.Id,
+        wingName: request.parkingSystem.WingName,
+        type: request.parkingSystem.Type,
+        level: request.parkingSystem.Level,
+        column: request.parkingSystem.Column
+      } : null,
+      car: request.car ? {
+        id: request.car.Id,
+        carType: request.car.CarType,
+        carModel: request.car.CarModel,
+        carCompany: request.car.CarCompany,
+        carNumber: request.car.CarNumber
       } : null,
       status: request.Status,
       estimatedTime: request.EstimatedTime,

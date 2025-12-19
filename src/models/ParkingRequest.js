@@ -15,11 +15,19 @@ const ParkingRequest = sequelize.define('ParkingRequest', {
       key: 'Id'
     }
   },
-  OperatorId: {
+  ProjectId: {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: 'operators',
+      model: 'projects',
+      key: 'Id'
+    }
+  },
+  ParkingSystemId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'parking_system',
       key: 'Id'
     }
   },
