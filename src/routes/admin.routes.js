@@ -89,6 +89,159 @@ const { validateUpdatePalletPower } = require('../validators/operator.validator'
  */
 router.get('/projects', parkingSystemController.getProjectListWithParkingSystems);
 
+/**
+ * @swagger
+ * /api/admin/project-details:
+ *   get:
+ *     summary: Get project details with parking system and all pallet details (Admin only)
+ *     description: Returns complete project information including its parking system and all associated pallet details. Since there is one parking system per project, only projectId is required.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: projectId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Project ID
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Project details with parking system and pallets retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     project:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         projectName:
+ *                           type: string
+ *                         societyName:
+ *                           type: string
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *                     parkingSystem:
+ *                       type: object
+ *                       nullable: true
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         wingName:
+ *                           type: string
+ *                         projectId:
+ *                           type: integer
+ *                         type:
+ *                           type: string
+ *                           enum: [Tower, Puzzle]
+ *                         level:
+ *                           type: integer
+ *                         levelBelowGround:
+ *                           type: integer
+ *                           nullable: true
+ *                         column:
+ *                           type: integer
+ *                         totalNumberOfPallet:
+ *                           type: integer
+ *                         timeForEachLevel:
+ *                           type: integer
+ *                         timeForHorizontalMove:
+ *                           type: integer
+ *                         bufferTime:
+ *                           type: integer
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *                     palletDetails:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           userId:
+ *                             type: integer
+ *                           projectId:
+ *                             type: integer
+ *                           parkingSystemId:
+ *                             type: integer
+ *                           level:
+ *                             type: integer
+ *                             nullable: true
+ *                           levelBelowGround:
+ *                             type: integer
+ *                             nullable: true
+ *                           column:
+ *                             type: integer
+ *                           userGivenPalletNumber:
+ *                             type: string
+ *                           carId:
+ *                             type: integer
+ *                             nullable: true
+ *                           car:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               carType:
+ *                                 type: string
+ *                               carModel:
+ *                                 type: string
+ *                               carCompany:
+ *                                 type: string
+ *                               carNumber:
+ *                                 type: string
+ *                               user:
+ *                                 type: object
+ *                                 nullable: true
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   username:
+ *                                     type: string
+ *                           status:
+ *                             type: string
+ *                             enum: [Assigned, Released]
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of pallets
+ *       400:
+ *         description: Project ID is required
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ *       404:
+ *         description: Project not found
+ */
+router.get('/project-details', authorize('admin'), parkingSystemController.getProjectDetailsWithParkingSystemAndPallets);
+
 // All routes below require authentication
 router.use(authenticate);
 

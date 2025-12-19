@@ -408,10 +408,133 @@ const generatePallets = async (parkingSystemId, startingPalletNumber) => {
   };
 };
 
+// Get Project Details with Parking System and All Pallet Details Service (Admin only)
+const getProjectDetailsWithParkingSystemAndPallets = async (projectId) => {
+  // Step 1: Validate project exists
+  const project = await Project.findByPk(projectId);
+  if (!project) {
+    throw new Error('Project not found');
+  }
+
+  // Step 2: Get parking system for this project (assuming one parking system per project)
+  const parkingSystem = await ParkingSystem.findOne({
+    where: {
+      ProjectId: projectId
+    }
+  });
+
+  if (!parkingSystem) {
+    return {
+      project: {
+        id: project.Id,
+        projectName: project.ProjectName,
+        societyName: project.SocietyName,
+        createdAt: project.CreatedAt,
+        updatedAt: project.UpdatedAt
+      },
+      parkingSystem: null,
+      palletDetails: [],
+      count: 0
+    };
+  }
+
+  // Step 3: Get all pallet details for this parking system
+  const palletDetails = await PalletAllotment.findAll({
+    where: {
+      ProjectId: projectId,
+      ParkingSystemId: parkingSystem.Id
+    },
+    include: [
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber'],
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['Id', 'Username']
+          }
+        ],
+        required: false
+      },
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'LevelBelowGround', 'Column']
+      }
+    ],
+    order: [
+      [sequelize.literal('CASE WHEN Level IS NULL THEN 1 ELSE 0 END'), 'ASC'],
+      ['Level', 'ASC'],
+      [sequelize.literal('CASE WHEN LevelBelowGround IS NULL THEN 1 ELSE 0 END'), 'ASC'],
+      ['LevelBelowGround', 'ASC'],
+      ['Column', 'ASC']
+    ]
+  });
+
+  return {
+    project: {
+      id: project.Id,
+      projectName: project.ProjectName,
+      societyName: project.SocietyName,
+      createdAt: project.CreatedAt,
+      updatedAt: project.UpdatedAt
+    },
+    parkingSystem: {
+      id: parkingSystem.Id,
+      wingName: parkingSystem.WingName,
+      projectId: parkingSystem.ProjectId,
+      type: parkingSystem.Type,
+      level: parkingSystem.Level,
+      levelBelowGround: parkingSystem.LevelBelowGround,
+      column: parkingSystem.Column,
+      totalNumberOfPallet: parkingSystem.TotalNumberOfPallet,
+      timeForEachLevel: parkingSystem.TimeForEachLevel,
+      timeForHorizontalMove: parkingSystem.TimeForHorizontalMove,
+      bufferTime: parkingSystem.BufferTime,
+      createdAt: parkingSystem.CreatedAt,
+      updatedAt: parkingSystem.UpdatedAt
+    },
+    palletDetails: palletDetails.map(pallet => ({
+      id: pallet.Id,
+      userId: pallet.UserId,
+      projectId: pallet.ProjectId,
+      parkingSystemId: pallet.ParkingSystemId,
+      level: pallet.Level,
+      levelBelowGround: pallet.LevelBelowGround,
+      column: pallet.Column,
+      userGivenPalletNumber: pallet.UserGivenPalletNumber,
+      carId: pallet.CarId,
+      car: pallet.car ? {
+        id: pallet.car.Id,
+        carType: pallet.car.CarType,
+        carModel: pallet.car.CarModel,
+        carCompany: pallet.car.CarCompany,
+        carNumber: pallet.car.CarNumber,
+        user: pallet.car.user ? {
+          id: pallet.car.user.Id,
+          username: pallet.car.user.Username
+        } : null
+      } : null,
+      status: pallet.Status,
+      createdAt: pallet.CreatedAt,
+      updatedAt: pallet.UpdatedAt
+    })),
+    count: palletDetails.length
+  };
+};
+
 module.exports = {
   createParkingSystem,
   getProjectListWithParkingSystems,
   getPalletDetails,
-  generatePallets
+  generatePallets,
+  getProjectDetailsWithParkingSystemAndPallets
 };
 
