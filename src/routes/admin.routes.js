@@ -217,6 +217,171 @@ router.get('/customers', authorize('admin', 'operator'), customerController.getC
 
 /**
  * @swagger
+ * /api/admin/customers-with-cars:
+ *   post:
+ *     summary: Get customers with their cars filtered by project IDs (Admin only)
+ *     description: Returns all customers with their associated cars for the specified project IDs. Only accessible by admins.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - projectIds
+ *             properties:
+ *               projectIds:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                   minimum: 1
+ *                 description: Array of project IDs to filter customers
+ *                 example: [1, 2, 3]
+ *                 minItems: 1
+ *     responses:
+ *       200:
+ *         description: Customers with cars retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     customers:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           userId:
+ *                             type: integer
+ *                           user:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               username:
+ *                                 type: string
+ *                               role:
+ *                                 type: string
+ *                               createdAt:
+ *                                 type: string
+ *                                 format: date-time
+ *                               updatedAt:
+ *                                 type: string
+ *                                 format: date-time
+ *                           firstName:
+ *                             type: string
+ *                           lastName:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                           mobileNumber:
+ *                             type: string
+ *                           projectId:
+ *                             type: integer
+ *                           project:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               projectName:
+ *                                 type: string
+ *                               societyName:
+ *                                 type: string
+ *                           parkingSystemId:
+ *                             type: integer
+ *                             nullable: true
+ *                           parkingSystem:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               wingName:
+ *                                 type: string
+ *                               type:
+ *                                 type: string
+ *                                 enum: [Tower, Puzzle]
+ *                               level:
+ *                                 type: integer
+ *                               levelBelowGround:
+ *                                 type: integer
+ *                                 nullable: true
+ *                               column:
+ *                                 type: integer
+ *                           palletAllotmentId:
+ *                             type: integer
+ *                             nullable: true
+ *                           flatNumber:
+ *                             type: string
+ *                           profession:
+ *                             type: string
+ *                           status:
+ *                             type: string
+ *                             enum: [Approved, Rejected, Pending]
+ *                           approvedBy:
+ *                             type: integer
+ *                             nullable: true
+ *                           approvedAt:
+ *                             type: string
+ *                             format: date-time
+ *                             nullable: true
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
+ *                           cars:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 userId:
+ *                                   type: integer
+ *                                 carType:
+ *                                   type: string
+ *                                 carModel:
+ *                                   type: string
+ *                                 carCompany:
+ *                                   type: string
+ *                                 carNumber:
+ *                                   type: string
+ *                                 createdAt:
+ *                                   type: string
+ *                                   format: date-time
+ *                                 updatedAt:
+ *                                   type: string
+ *                                   format: date-time
+ *                     count:
+ *                       type: integer
+ *                       description: Total number of customers
+ *       400:
+ *         description: Validation error - Project IDs array is required or invalid
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin access required
+ */
+router.post('/customers-with-cars', authorize('admin'), customerController.getCustomersWithCarsByProjectIds);
+
+/**
+ * @swagger
  * /api/admin/create-parking-system:
  *   post:
  *     summary: Create a new parking system with pallet details (Admin only)

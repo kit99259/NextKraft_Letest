@@ -919,6 +919,122 @@ const getCustomerList = async (userId, userRole) => {
   }));
 };
 
+// Get Customers with Cars by Project IDs Service (Admin only)
+const getCustomersWithCarsByProjectIds = async (projectIds) => {
+  // Validate projectIds is an array and not empty
+  if (!Array.isArray(projectIds) || projectIds.length === 0) {
+    throw new Error('Project IDs array is required and cannot be empty');
+  }
+
+  // Convert to integers and filter out invalid values
+  const validProjectIds = projectIds
+    .map(id => parseInt(id))
+    .filter(id => !isNaN(id) && id > 0);
+
+  if (validProjectIds.length === 0) {
+    throw new Error('No valid project IDs provided');
+  }
+
+  // Fetch customers belonging to the specified projects
+  const customers = await Customer.findAll({
+    where: {
+      ProjectId: { [Op.in]: validProjectIds }
+    },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role', 'CreatedAt', 'UpdatedAt']
+      },
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'LevelBelowGround', 'Column']
+      }
+    ],
+    order: [['CreatedAt', 'DESC']]
+  });
+
+  // Get all user IDs from customers
+  const userIds = customers.map(customer => customer.UserId);
+  let carsByUserId = {};
+
+  // Fetch all cars for these customers in one query
+  if (userIds.length > 0) {
+    const cars = await Car.findAll({
+      where: { UserId: { [Op.in]: userIds } },
+      attributes: ['Id', 'UserId', 'CarType', 'CarModel', 'CarCompany', 'CarNumber', 'CreatedAt', 'UpdatedAt'],
+      order: [['CreatedAt', 'DESC']]
+    });
+
+    // Group cars by UserId
+    carsByUserId = cars.reduce((acc, car) => {
+      if (!acc[car.UserId]) {
+        acc[car.UserId] = [];
+      }
+      acc[car.UserId].push({
+        id: car.Id,
+        userId: car.UserId,
+        carType: car.CarType,
+        carModel: car.CarModel,
+        carCompany: car.CarCompany,
+        carNumber: car.CarNumber,
+        createdAt: car.CreatedAt,
+        updatedAt: car.UpdatedAt
+      });
+      return acc;
+    }, {});
+  }
+
+  return {
+    customers: customers.map(customer => ({
+      id: customer.Id,
+      userId: customer.UserId,
+      user: customer.user ? {
+        id: customer.user.Id,
+        username: customer.user.Username,
+        role: customer.user.Role,
+        createdAt: customer.user.CreatedAt,
+        updatedAt: customer.user.UpdatedAt
+      } : null,
+      firstName: customer.FirstName,
+      lastName: customer.LastName,
+      email: customer.Email,
+      mobileNumber: customer.MobileNumber,
+      projectId: customer.ProjectId,
+      project: customer.project ? {
+        id: customer.project.Id,
+        projectName: customer.project.ProjectName,
+        societyName: customer.project.SocietyName
+      } : null,
+      parkingSystemId: customer.ParkingSystemId,
+      parkingSystem: customer.parkingSystem ? {
+        id: customer.parkingSystem.Id,
+        wingName: customer.parkingSystem.WingName,
+        type: customer.parkingSystem.Type,
+        level: customer.parkingSystem.Level,
+        levelBelowGround: customer.parkingSystem.LevelBelowGround,
+        column: customer.parkingSystem.Column
+      } : null,
+      palletAllotmentId: customer.PalletAllotmentId,
+      flatNumber: customer.FlatNumber,
+      profession: customer.Profession,
+      status: customer.Status,
+      approvedBy: customer.ApprovedBy,
+      approvedAt: customer.ApprovedAt,
+      createdAt: customer.CreatedAt,
+      updatedAt: customer.UpdatedAt,
+      cars: carsByUserId[customer.UserId] || []
+    })),
+    count: customers.length
+  };
+};
+
 module.exports = {
   createCustomer,
   getCustomerProfile,
@@ -928,6 +1044,7 @@ module.exports = {
   getCustomerPalletStatus,
   requestCarRelease,
   getCustomerRequests,
-  getCustomerList
+  getCustomerList,
+  getCustomersWithCarsByProjectIds
 };
 

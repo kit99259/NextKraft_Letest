@@ -159,6 +159,26 @@ const getCustomerList = async (req, res) => {
   }
 };
 
+// Get Customers with Cars by Project IDs Controller (Admin only)
+const getCustomersWithCarsByProjectIds = async (req, res) => {
+  try {
+    const { projectIds } = req.body;
+    
+    if (!projectIds) {
+      return errorResponse(res, 'Project IDs array is required', 400);
+    }
+    
+    const result = await customerService.getCustomersWithCarsByProjectIds(projectIds);
+    
+    return successResponse(res, result, 'Customers with cars retrieved successfully');
+  } catch (error) {
+    console.error('Get customers with cars by project IDs error:', error);
+    const statusCode = error.message === 'Project IDs array is required and cannot be empty' ||
+                      error.message === 'No valid project IDs provided' ? 400 : 500;
+    return errorResponse(res, error.message || 'Failed to retrieve customers with cars', statusCode);
+  }
+};
+
 module.exports = {
   createCustomer,
   getCustomerProfile,
@@ -168,6 +188,7 @@ module.exports = {
   getCustomerPalletStatus,
   requestCarRelease,
   getCustomerRequests,
-  getCustomerList
+  getCustomerList,
+  getCustomersWithCarsByProjectIds
 };
 
