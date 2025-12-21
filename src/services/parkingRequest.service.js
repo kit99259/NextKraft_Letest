@@ -1,5 +1,6 @@
+const { Op } = require('sequelize');
 const notificationService = require('./notification.service');
-const { User, Customer, Operator, Car, ParkingRequest } = require('../models/associations');
+const { User, Customer, Operator, Car, ParkingRequest, Project, ParkingSystem, PalletAllotment } = require('../models/associations');
 
 const getISTTime = () => {
   const now = new Date();
@@ -16,6 +17,32 @@ const createParkingRequest = async (userId, carId) => {
   });
   if (!car) {
     throw new Error('Car not found for this user');
+  }
+
+  // Check if car is already parked (assigned to a pallet)
+  const parkedPallet = await PalletAllotment.findOne({
+    where: {
+      UserId: userId,
+      CarId: carId,
+      Status: 'Assigned'
+    }
+  });
+
+  if (parkedPallet) {
+    throw new Error('This car is already parked. Please release the car first before creating a new parking request.');
+  }
+
+  // Check if there's already an active parking request for this car
+  const existingParkingRequest = await ParkingRequest.findOne({
+    where: {
+      CarId: carId,
+      UserId: userId,
+      Status: { [Op.notIn]: ['Completed', 'Cancelled'] }
+    }
+  });
+
+  if (existingParkingRequest) {
+    throw new Error('An active parking request already exists for this car. Please wait for the current request to be completed or cancelled.');
   }
 
   // Fetch customer profile to get project/parking system
@@ -91,7 +118,7 @@ const createParkingRequest = async (userId, carId) => {
       ? `${parkingRequest.car.CarCompany} ${parkingRequest.car.CarModel} (${parkingRequest.car.CarNumber})`
       : 'a car';
     await notificationService.sendNotificationToUser(
-      parkingRequest.operator.user.Id,
+      operator.user.Id,
       'New Parking Request',
       `New parking request for ${carInfo}`,
       {

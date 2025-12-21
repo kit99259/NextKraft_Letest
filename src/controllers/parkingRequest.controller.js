@@ -16,6 +16,10 @@ const createParkingRequest = async (req, res) => {
                        error.message === 'Customer profile not found' ||
                        error.message === 'No operator assigned to this parking system'
       ? 404
+      : error.message === 'Customer is not assigned to a project and parking system' ||
+        error.message.includes('An active parking request already exists') ||
+        error.message.includes('This car is already parked')
+      ? 400
       : 500;
     return errorResponse(res, error.message || 'Failed to create parking request', statusCode);
   }
