@@ -410,7 +410,7 @@ const getCustomerPalletStatus = async (userId) => {
     }
   });
 
-  return pallets.map(pallet => {
+  const palletsData = pallets.map(pallet => {
     const request = requestsMap.get(pallet.Id);
     const waitingNumber = waitingNumbersMap.get(pallet.Id);
     
@@ -483,6 +483,67 @@ const getCustomerPalletStatus = async (userId) => {
       updatedAt: pallet.UpdatedAt
     };
   });
+
+  // Get all pending parking requests for this customer
+  const pendingParkingRequests = await ParkingRequest.findAll({
+    where: {
+      UserId: userId,
+      Status: 'Pending'
+    },
+    include: [
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      },
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+      }
+    ],
+    order: [['CreatedAt', 'DESC']]
+  });
+
+  const parkRequestsData = pendingParkingRequests.map(parkingRequest => ({
+    id: parkingRequest.Id,
+    userId: parkingRequest.UserId,
+    projectId: parkingRequest.ProjectId,
+    parkingSystemId: parkingRequest.ParkingSystemId,
+    carId: parkingRequest.CarId,
+    status: parkingRequest.Status,
+    project: parkingRequest.project ? {
+      id: parkingRequest.project.Id,
+      projectName: parkingRequest.project.ProjectName,
+      societyName: parkingRequest.project.SocietyName
+    } : null,
+    parkingSystem: parkingRequest.parkingSystem ? {
+      id: parkingRequest.parkingSystem.Id,
+      wingName: parkingRequest.parkingSystem.WingName,
+      type: parkingRequest.parkingSystem.Type,
+      level: parkingRequest.parkingSystem.Level,
+      column: parkingRequest.parkingSystem.Column
+    } : null,
+    car: parkingRequest.car ? {
+      id: parkingRequest.car.Id,
+      carType: parkingRequest.car.CarType,
+      carModel: parkingRequest.car.CarModel,
+      carCompany: parkingRequest.car.CarCompany,
+      carNumber: parkingRequest.car.CarNumber
+    } : null,
+    createdAt: parkingRequest.CreatedAt,
+    updatedAt: parkingRequest.UpdatedAt
+  }));
+
+  return {
+    pallets: palletsData,
+    parkRequests: parkRequestsData
+  };
 };
 
 // Request Car Release Service

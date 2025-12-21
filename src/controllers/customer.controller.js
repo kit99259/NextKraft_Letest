@@ -103,7 +103,11 @@ const getCustomerPalletStatus = async (req, res) => {
     
     const result = await customerService.getCustomerPalletStatus(userId);
     
-    return successResponse(res, { pallets: result, count: result.length }, 'Pallet status retrieved successfully');
+    return successResponse(res, { 
+      pallets: result.pallets, 
+      count: result.pallets.length,
+      parkRequests: result.parkRequests
+    }, 'Pallet status retrieved successfully');
   } catch (error) {
     console.error('Get customer pallet status error:', error);
     return errorResponse(res, error.message || 'Failed to retrieve pallet status', 500);

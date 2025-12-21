@@ -448,7 +448,7 @@ router.get('/car/available', authenticate, customerController.getAvailableCarLis
  * /api/customer/pallet-status:
  *   get:
  *     summary: Get pallet status for current customer (Customer authentication required)
- *     description: Returns all pallets assigned to the authenticated customer along with the latest non-completed request for each pallet (if any). Returns empty list if no pallets are assigned. The request field will be null if no non-completed request is found for a pallet.
+ *     description: Returns all pallets assigned to the authenticated customer along with the latest non-completed request for each pallet (if any), and all pending parking requests for the customer. Returns empty list if no pallets are assigned. The request field will be null if no non-completed request is found for a pallet.
  *     tags: [Customer]
  *     security:
  *       - bearerAuth: []
@@ -623,6 +623,71 @@ router.get('/car/available', authenticate, customerController.getAvailableCarLis
  *                     count:
  *                       type: integer
  *                       description: Total number of assigned pallets (0 if none assigned)
+ *                     parkRequests:
+ *                       type: array
+ *                       description: All pending parking requests for the customer
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           userId:
+ *                             type: integer
+ *                           projectId:
+ *                             type: integer
+ *                           parkingSystemId:
+ *                             type: integer
+ *                           carId:
+ *                             type: integer
+ *                           status:
+ *                             type: string
+ *                             enum: [Pending]
+ *                             description: Parking request status (only pending requests are included)
+ *                           project:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               projectName:
+ *                                 type: string
+ *                               societyName:
+ *                                 type: string
+ *                           parkingSystem:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               wingName:
+ *                                 type: string
+ *                               type:
+ *                                 type: string
+ *                                 enum: [Tower, Puzzle]
+ *                               level:
+ *                                 type: integer
+ *                               column:
+ *                                 type: integer
+ *                           car:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               carType:
+ *                                 type: string
+ *                               carModel:
+ *                                 type: string
+ *                               carCompany:
+ *                                 type: string
+ *                               carNumber:
+ *                                 type: string
+ *                           createdAt:
+ *                             type: string
+ *                             format: date-time
+ *                           updatedAt:
+ *                             type: string
+ *                             format: date-time
  *       401:
  *         description: Unauthorized - Authentication required
  */
