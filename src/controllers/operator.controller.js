@@ -289,6 +289,55 @@ const callSpecificPallet = async (req, res) => {
   }
 };
 
+// Call Pallet and Create Request Controller
+const callPalletAndCreateRequest = async (req, res) => {
+  try {
+    const operatorUserId = req.user.id; // Get operator userId from authenticated session
+    const { palletId } = req.body;
+    
+    const result = await operatorService.callPalletAndCreateRequest(operatorUserId, parseInt(palletId));
+    
+    return successResponse(res, result, 'Pallet called and request created successfully');
+  } catch (error) {
+    console.error('Call pallet and create request error:', error);
+    const statusCode = error.message === 'Operator profile not found' ? 404 :
+                       error.message === 'Operator is not assigned to a parking system' ? 400 :
+                       error.message === 'Operator is not assigned to a project' ? 400 :
+                       error.message === 'Pallet not found' ? 404 :
+                       error.message === 'Pallet does not belong to your parking system' ? 400 :
+                       error.message === 'Pallet is not assigned to any customer or car' ? 400 :
+                       error.message === 'Customer not found for this pallet' ? 404 :
+                       error.message === 'Pallet location information is invalid' ? 400 :
+                       error.message === 'Invalid parking system type' ? 400 :
+                       error.message.includes('A request already exists for this pallet') ? 400 : 500;
+    return errorResponse(res, error.message || 'Failed to call pallet and create request', statusCode);
+  }
+};
+
+// Call Pallet by Car Number Controller
+const callPalletByCarNumber = async (req, res) => {
+  try {
+    const operatorUserId = req.user.id; // Get operator userId from authenticated session
+    const { carNumberLast6 } = req.body;
+    
+    const result = await operatorService.callPalletByCarNumber(operatorUserId, carNumberLast6);
+    
+    return successResponse(res, result, 'Pallet called and request created successfully by car number');
+  } catch (error) {
+    console.error('Call pallet by car number error:', error);
+    const statusCode = error.message === 'Operator profile not found' ? 404 :
+                       error.message === 'Operator is not assigned to a parking system' ? 400 :
+                       error.message === 'Operator is not assigned to a project' ? 400 :
+                       error.message.includes('No car found with last 6 digits') ? 404 :
+                       error.message.includes('is not parked in your parking system') ? 404 :
+                       error.message === 'Customer not found for this car' ? 404 :
+                       error.message === 'Pallet location information is invalid' ? 400 :
+                       error.message === 'Invalid parking system type' ? 400 :
+                       error.message.includes('A request already exists for this car') ? 400 : 500;
+    return errorResponse(res, error.message || 'Failed to call pallet by car number', statusCode);
+  }
+};
+
 module.exports = {
   createOperator,
   getOperatorProfile,
@@ -303,6 +352,8 @@ module.exports = {
   callEmptyPallet,
   updateParkingSystemStatus,
   releaseParkedCar,
-  callSpecificPallet
+  callSpecificPallet,
+  callPalletAndCreateRequest,
+  callPalletByCarNumber
 };
 

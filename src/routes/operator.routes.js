@@ -5,7 +5,7 @@ const operatorController = require('../controllers/operator.controller');
 const parkingSystemController = require('../controllers/parkingSystem.controller');
 const parkingRequestController = require('../controllers/parkingRequest.controller');
 const { validateCreateOperator } = require('../validators/operator.validator');
-const { validateAssignPallet, validateUpdateRequestStatus, validateCallEmptyPallet, validateUpdateParkingSystemStatus, validateReleaseParkedCar, validateCallSpecificPallet } = require('../validators/pallet.validator');
+const { validateAssignPallet, validateUpdateRequestStatus, validateCallEmptyPallet, validateUpdateParkingSystemStatus, validateReleaseParkedCar, validateCallSpecificPallet, validateCallPalletAndCreateRequest, validateCallPalletByCarNumber } = require('../validators/pallet.validator');
 
 // All routes require authentication
 router.use(authenticate);
@@ -1525,6 +1525,280 @@ router.post('/call-empty-pallet', authorize('operator'), validateCallEmptyPallet
  *         description: Operator profile not found, pallet not found, or request not found
  */
 router.post('/call-specific-pallet', authorize('operator'), validateCallSpecificPallet, operatorController.callSpecificPallet);
+
+/**
+ * @swagger
+ * /api/operator/call-pallet-create-request:
+ *   post:
+ *     summary: Call pallet and create release request (Operator only)
+ *     description: |
+ *       Calls a specific pallet by palletId when there's no existing request for the customer.
+ *       This will:
+ *       - Validate the pallet is assigned to a customer and car
+ *       - Check if a request already exists (if yes, throws error)
+ *       - Create a new release request with status 'Pending'
+ *       - Immediately update request status to 'Accepted'
+ *       - Calculate time to move pallet to ground level
+ *       - Update parking system status to 'PalletMovingToGround'
+ *       - Send notification to customer with estimated time
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - palletId
+ *             properties:
+ *               palletId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: ID of the pallet to call
+ *                 example: 123
+ *     responses:
+ *       200:
+ *         description: Pallet called and request created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     palletId:
+ *                       type: integer
+ *                       description: ID of the pallet
+ *                     palletNumber:
+ *                       type: string
+ *                       description: User-given pallet number
+ *                     level:
+ *                       type: integer
+ *                       nullable: true
+ *                       description: Level above ground
+ *                     levelBelowGround:
+ *                       type: integer
+ *                       nullable: true
+ *                       description: Level below ground (for Puzzle only)
+ *                     column:
+ *                       type: integer
+ *                       description: Column number
+ *                     timeToCall:
+ *                       type: integer
+ *                       description: Time to call pallet to ground in seconds
+ *                     timeToCallFormatted:
+ *                       type: string
+ *                       description: Time in human-readable format
+ *                       example: "5 minutes 30 seconds"
+ *                     request:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         status:
+ *                           type: string
+ *                           enum: [Accepted]
+ *                         estimatedTime:
+ *                           type: integer
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *                     customer:
+ *                       type: object
+ *                       nullable: true
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         userId:
+ *                           type: integer
+ *                         firstName:
+ *                           type: string
+ *                         lastName:
+ *                           type: string
+ *                     car:
+ *                       type: object
+ *                       nullable: true
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         carType:
+ *                           type: string
+ *                         carModel:
+ *                           type: string
+ *                         carCompany:
+ *                           type: string
+ *                         carNumber:
+ *                           type: string
+ *                     parkingSystem:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         type:
+ *                           type: string
+ *                           enum: [Tower, Puzzle]
+ *                         wingName:
+ *                           type: string
+ *                           nullable: true
+ *       400:
+ *         description: Validation error, pallet not assigned, request already exists, or pallet does not belong to operator's parking system
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator profile not found, pallet not found, or customer not found
+ */
+router.post('/call-pallet-create-request', authorize('operator'), validateCallPalletAndCreateRequest, operatorController.callPalletAndCreateRequest);
+
+/**
+ * @swagger
+ * /api/operator/call-pallet-by-car-number:
+ *   post:
+ *     summary: Call pallet by car number last 6 digits (Operator only)
+ *     description: |
+ *       Finds a car by the last 6 digits of its car number (unique), checks if it's parked,
+ *       creates a release request, and calls the pallet (same as callSpecificPallet).
+ *       This will:
+ *       - Search for car with matching last 6 digits (unique identifier)
+ *       - Check if the car is parked in operator's parking system
+ *       - Check if a request already exists (if yes, throws error)
+ *       - Create a new release request with status 'Pending'
+ *       - Immediately update request status to 'Accepted'
+ *       - Calculate time to move pallet to ground level
+ *       - Update parking system status to 'PalletMovingToGround'
+ *       - Send notification to customer with estimated time
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - carNumberLast6
+ *             properties:
+ *               carNumberLast6:
+ *                 type: string
+ *                 minLength: 6
+ *                 maxLength: 6
+ *                 pattern: '^\d+$'
+ *                 description: Last 6 digits of the car number (unique identifier)
+ *                 example: "123456"
+ *     responses:
+ *       200:
+ *         description: Pallet called and request created successfully by car number
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     palletId:
+ *                       type: integer
+ *                       description: ID of the pallet
+ *                     palletNumber:
+ *                       type: string
+ *                       description: User-given pallet number
+ *                     level:
+ *                       type: integer
+ *                       nullable: true
+ *                       description: Level above ground
+ *                     levelBelowGround:
+ *                       type: integer
+ *                       nullable: true
+ *                       description: Level below ground (for Puzzle only)
+ *                     column:
+ *                       type: integer
+ *                       description: Column number
+ *                     timeToCall:
+ *                       type: integer
+ *                       description: Time to call pallet to ground in seconds
+ *                     timeToCallFormatted:
+ *                       type: string
+ *                       description: Time in human-readable format
+ *                       example: "5 minutes 30 seconds"
+ *                     request:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         status:
+ *                           type: string
+ *                           enum: [Accepted]
+ *                         estimatedTime:
+ *                           type: integer
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *                     customer:
+ *                       type: object
+ *                       nullable: true
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         userId:
+ *                           type: integer
+ *                         firstName:
+ *                           type: string
+ *                         lastName:
+ *                           type: string
+ *                     car:
+ *                       type: object
+ *                       nullable: true
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         carType:
+ *                           type: string
+ *                         carModel:
+ *                           type: string
+ *                         carCompany:
+ *                           type: string
+ *                         carNumber:
+ *                           type: string
+ *                     parkingSystem:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         type:
+ *                           type: string
+ *                           enum: [Tower, Puzzle]
+ *                         wingName:
+ *                           type: string
+ *                           nullable: true
+ *       400:
+ *         description: Validation error, request already exists, or car not parked in operator's parking system
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator profile not found, no car found with last 6 digits, or car not parked in operator's parking system
+ */
+router.post('/call-pallet-by-car-number', authorize('operator'), validateCallPalletByCarNumber, operatorController.callPalletByCarNumber);
 
 /**
  * @swagger

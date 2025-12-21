@@ -101,6 +101,32 @@ const validateCallSpecificPallet = [
   handleValidationErrors
 ];
 
+// Call pallet and create request validation rules
+const validateCallPalletAndCreateRequest = [
+  body('palletId')
+    .notEmpty()
+    .withMessage('Pallet ID is required')
+    .isInt({ min: 1 })
+    .withMessage('Pallet ID must be a valid integer'),
+  
+  handleValidationErrors
+];
+
+// Call pallet by car number last 6 digits validation rules
+const validateCallPalletByCarNumber = [
+  body('carNumberLast6')
+    .notEmpty()
+    .withMessage('Car number last 6 digits is required')
+    .isString()
+    .withMessage('Car number last 6 digits must be a string')
+    .isLength({ min: 6, max: 6 })
+    .withMessage('Car number last 6 digits must be exactly 6 characters')
+    .matches(/^\d+$/)
+    .withMessage('Car number last 6 digits must contain only digits'),
+  
+  handleValidationErrors
+];
+
 module.exports = {
   validateAssignPallet,
   validateRequestCarRelease,
@@ -108,6 +134,8 @@ module.exports = {
   validateCallEmptyPallet,
   validateUpdateParkingSystemStatus,
   validateReleaseParkedCar,
-  validateCallSpecificPallet
+  validateCallSpecificPallet,
+  validateCallPalletAndCreateRequest,
+  validateCallPalletByCarNumber
 };
 
