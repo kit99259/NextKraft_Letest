@@ -22,10 +22,27 @@ const validateAssignPallet = [
     .withMessage('Pallet ID must be a valid integer'),
   
   body('parkingRequestId')
-    .notEmpty()
-    .withMessage('Parking Request ID is required')
+    .optional()
     .isInt({ min: 1 })
     .withMessage('Parking Request ID must be a valid integer'),
+  
+  body('carNumber')
+    .optional()
+    .isString()
+    .withMessage('Car number must be a string')
+    .notEmpty()
+    .withMessage('Car number cannot be empty'),
+  
+  // Custom validation to ensure either parkingRequestId or carNumber is provided
+  body().custom((value) => {
+    if (!value.parkingRequestId && !value.carNumber) {
+      throw new Error('Either parkingRequestId or carNumber must be provided');
+    }
+    if (value.parkingRequestId && value.carNumber) {
+      throw new Error('Cannot provide both parkingRequestId and carNumber. Please provide only one.');
+    }
+    return true;
+  }),
   
   handleValidationErrors
 ];

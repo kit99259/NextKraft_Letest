@@ -309,7 +309,7 @@ const getOperatorProjectWithParkingSystems = async (userId) => {
 };
 
 // Assign Pallet to Customer Service
-const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId) => {
+const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId = null, carNumber = null) => {
   // Step 1: Validate operator exists and get operator details
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId }
@@ -324,65 +324,262 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
     throw new Error('Operator is not assigned to a project and parking system');
   }
 
-  // Step 3: Find the parking request
-  const parkingRequest = await ParkingRequest.findOne({
-    where: {
-      Id: parkingRequestId,
-      ProjectId: operator.ProjectId,
-      ParkingSystemId: operator.ParkingSystemId
-    },
-    include: [
-      {
-        model: User,
-        as: 'user',
-        attributes: ['Id', 'Username', 'Role']
+  let parkingRequest = null;
+  let customer = null;
+  let car = null;
+
+  // Step 3: Handle two scenarios: parkingRequestId OR carNumber
+  if (parkingRequestId) {
+    // Scenario 1: parkingRequestId provided - follow current flow
+    parkingRequest = await ParkingRequest.findOne({
+      where: {
+        Id: parkingRequestId,
+        ProjectId: operator.ProjectId,
+        ParkingSystemId: operator.ParkingSystemId
       },
-      {
-        model: Car,
-        as: 'car',
-        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['Id', 'Username', 'Role']
+        },
+        {
+          model: Car,
+          as: 'car',
+          attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+        }
+      ]
+    });
+
+    if (!parkingRequest) {
+      throw new Error('Parking request not found or does not belong to your parking system');
+    }
+
+    // Validate parking request status (should be Pending or Accepted)
+    if (!['Pending', 'Accepted'].includes(parkingRequest.Status)) {
+      throw new Error(`Cannot assign pallet to a parking request with status: ${parkingRequest.Status}`);
+    }
+
+    // Find customer from parking request
+    customer = await Customer.findOne({
+      where: {
+        UserId: parkingRequest.UserId,
+        ProjectId: operator.ProjectId,
+        ParkingSystemId: operator.ParkingSystemId
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['Id', 'Username', 'Role']
+        }
+      ]
+    });
+
+    if (!customer) {
+      throw new Error('Customer not found for this parking request');
+    }
+
+    // Validate customer is approved
+    if (customer.Status !== 'Approved') {
+      throw new Error('Customer is not approved. Only approved customers can be assigned to pallets');
+    }
+
+    // Get car from parking request
+    car = parkingRequest.car;
+    if (!car) {
+      throw new Error('Car not found in parking request');
+    }
+
+  } else if (carNumber) {
+    // Scenario 2: carNumber provided - new flow
+    // Step 3.1: Check if car exists
+    car = await Car.findOne({
+      where: { CarNumber: carNumber },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['Id', 'Username', 'Role']
+        }
+      ]
+    });
+
+    let userId = null;
+
+    if (!car) {
+      // Car doesn't exist - need to create user, customer, and car
+      const dummyUsername = 'erhtghgkdgdutng534653';
+      
+      // Check if user with this username exists
+      let user = await User.findOne({ where: { Username: dummyUsername } });
+      
+      if (!user) {
+        // Create user with dummy password
+        const bcrypt = require('bcryptjs');
+        const hashedPassword = await bcrypt.hash('dummy123', 10);
+        
+        user = await User.create({
+          Username: dummyUsername,
+          Password: hashedPassword,
+          Role: 'customer'
+        });
+
+        // Create dummy customer
+        const istTime = getISTTime();
+        customer = await Customer.create({
+          UserId: user.Id,
+          FirstName: 'Dummy',
+          LastName: 'Customer',
+          Email: null,
+          MobileNumber: null,
+          ProjectId: operator.ProjectId,
+          ParkingSystemId: operator.ParkingSystemId,
+          FlatNumber: null,
+          Profession: null,
+          Status: 'Approved', // Auto-approve dummy customer
+          ApprovedBy: operatorUserId,
+          ApprovedAt: istTime,
+          CreatedAt: istTime,
+          UpdatedAt: istTime
+        });
+        
+        // Reload with user association
+        await customer.reload({
+          include: [
+            {
+              model: User,
+              as: 'user',
+              attributes: ['Id', 'Username', 'Role']
+            }
+          ]
+        });
+      } else {
+        // User exists - find or create customer
+        customer = await Customer.findOne({
+          where: {
+            UserId: user.Id,
+            ProjectId: operator.ProjectId,
+            ParkingSystemId: operator.ParkingSystemId
+          },
+          include: [
+            {
+              model: User,
+              as: 'user',
+              attributes: ['Id', 'Username', 'Role']
+            }
+          ]
+        });
+
+        if (!customer) {
+          // Create customer for existing user
+          const istTime = getISTTime();
+          customer = await Customer.create({
+            UserId: user.Id,
+            FirstName: 'Dummy',
+            LastName: 'Customer',
+            Email: null,
+            MobileNumber: null,
+            ProjectId: operator.ProjectId,
+            ParkingSystemId: operator.ParkingSystemId,
+            FlatNumber: null,
+            Profession: null,
+            Status: 'Approved', // Auto-approve dummy customer
+            ApprovedBy: operatorUserId,
+            ApprovedAt: istTime,
+            CreatedAt: istTime,
+            UpdatedAt: istTime
+          });
+          
+          // Reload with user association
+          await customer.reload({
+            include: [
+              {
+                model: User,
+                as: 'user',
+                attributes: ['Id', 'Username', 'Role']
+              }
+            ]
+          });
+        }
       }
-    ]
-  });
 
-  if (!parkingRequest) {
-    throw new Error('Parking request not found or does not belong to your parking system');
-  }
+      userId = user.Id;
 
-  // Step 4: Validate parking request status (should be Pending or Accepted)
-  if (!['Pending', 'Accepted'].includes(parkingRequest.Status)) {
-    throw new Error(`Cannot assign pallet to a parking request with status: ${parkingRequest.Status}`);
-  }
+      // Create car for the user
+      const istTime = getISTTime();
+      car = await Car.create({
+        UserId: userId,
+        CarType: null,
+        CarModel: null,
+        CarCompany: null,
+        CarNumber: carNumber,
+        CreatedAt: istTime,
+        UpdatedAt: istTime
+      });
+    } else {
+      // Car exists - get user and customer
+      userId = car.UserId;
+      
+      customer = await Customer.findOne({
+        where: {
+          UserId: userId,
+          ProjectId: operator.ProjectId,
+          ParkingSystemId: operator.ParkingSystemId
+        },
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['Id', 'Username', 'Role']
+          }
+        ]
+      });
 
-  // Step 5: Find customer from parking request
-  const customer = await Customer.findOne({
-    where: {
-      UserId: parkingRequest.UserId,
-      ProjectId: operator.ProjectId,
-      ParkingSystemId: operator.ParkingSystemId
-    },
-    include: [
-      {
-        model: User,
-        as: 'user',
-        attributes: ['Id', 'Username', 'Role']
+      if (!customer) {
+        throw new Error('Customer not found for this car');
       }
-    ]
-  });
 
-  if (!customer) {
-    throw new Error('Customer not found for this parking request');
-  }
+      // Validate customer is approved
+      if (customer.Status !== 'Approved') {
+        throw new Error('Customer is not approved. Only approved customers can be assigned to pallets');
+      }
+    }
 
-  // Step 6: Validate customer is approved
-  if (customer.Status !== 'Approved') {
-    throw new Error('Customer is not approved. Only approved customers can be assigned to pallets');
-  }
+    // Step 3.2: Check if parking request exists (not completed or cancelled)
+    const existingParkingRequest = await ParkingRequest.findOne({
+      where: {
+        CarId: car.Id,
+        UserId: car.UserId,
+        ProjectId: operator.ProjectId,
+        ParkingSystemId: operator.ParkingSystemId,
+        Status: { [Op.notIn]: ['Completed', 'Cancelled'] }
+      }
+    });
 
-  // Step 7: Get car from parking request
-  const car = parkingRequest.car;
-  if (!car) {
-    throw new Error('Car not found in parking request');
+    if (!existingParkingRequest) {
+      // Create new parking request
+      const istTime = getISTTime();
+      parkingRequest = await ParkingRequest.create({
+        UserId: car.UserId,
+        ProjectId: operator.ProjectId,
+        ParkingSystemId: operator.ParkingSystemId,
+        CarId: car.Id,
+        Status: 'Pending',
+        CreatedAt: istTime,
+        UpdatedAt: istTime
+      });
+    } else {
+      parkingRequest = existingParkingRequest;
+      
+      // Validate parking request status (should be Pending or Accepted)
+      if (!['Pending', 'Accepted'].includes(parkingRequest.Status)) {
+        throw new Error(`Cannot assign pallet to a parking request with status: ${parkingRequest.Status}`);
+      }
+    }
+
+  } else {
+    throw new Error('Either parkingRequestId or carNumber must be provided');
   }
 
   // Step 8: Get parking system with time information

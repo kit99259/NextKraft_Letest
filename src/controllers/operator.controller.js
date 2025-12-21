@@ -77,13 +77,14 @@ const getOperatorProjectWithParkingSystems = async (req, res) => {
 // Assign Pallet to Customer Controller
 const assignPalletToCustomer = async (req, res) => {
   try {
-    const { palletId, parkingRequestId } = req.body;
+    const { palletId, parkingRequestId, carNumber } = req.body;
     const operatorUserId = req.user.id; // Get operator userId from authenticated session
     
     const result = await operatorService.assignPalletToCustomer(
       operatorUserId,
       parseInt(palletId),
-      parseInt(parkingRequestId)
+      parkingRequestId ? parseInt(parkingRequestId) : null,
+      carNumber || null
     );
     
     return successResponse(res, result, 'Pallet assigned to customer successfully');
@@ -93,6 +94,7 @@ const assignPalletToCustomer = async (req, res) => {
                        error.message === 'Pallet not found' ||
                        error.message === 'Parking request not found or does not belong to your parking system' ||
                        error.message === 'Customer not found for this parking request' ||
+                       error.message === 'Customer not found for this car' ||
                        error.message === 'Car not found in parking request' ? 404 :
                        error.message === 'Operator is not assigned to a project and parking system' ||
                        error.message === 'Pallet is already assigned to another customer' ||
@@ -100,6 +102,7 @@ const assignPalletToCustomer = async (req, res) => {
                        error.message === 'Customer is not approved. Only approved customers can be assigned to pallets' ||
                        error.message === 'Pallet does not belong to your parking system' ||
                        error.message === 'Operator does not have access to this project' ||
+                       error.message === 'Either parkingRequestId or carNumber must be provided' ||
                        error.message.includes('Cannot assign pallet to a parking request with status') ? 400 : 500;
     return errorResponse(res, error.message || 'Failed to assign pallet to customer', statusCode);
   }

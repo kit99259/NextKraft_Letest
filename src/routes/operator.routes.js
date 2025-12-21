@@ -803,8 +803,16 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  * @swagger
  * /api/operator/assign-pallet:
  *   post:
- *     summary: Assign a pallet to a customer based on parking request (Operator only)
- *     description: Assigns a pallet to a customer based on their parking request. The pallet must be released, the customer must be approved, and the parking request must be in Pending or Accepted status. The customer and car information are retrieved from the parking request.
+ *     summary: Assign a pallet to a customer (Operator only)
+ *     description: |
+ *       Assigns a pallet to a customer. Two scenarios are supported:
+ *       1. If parkingRequestId is provided: Follows the standard flow using existing parking request.
+ *       2. If carNumber is provided (and parkingRequestId is null): 
+ *          - Checks if car exists. If not, creates user (username: "erhtghgkdgdutng534653"), dummy customer, and car.
+ *          - If car exists, uses existing user and customer.
+ *          - Checks if parking request exists (not completed/cancelled). If not, creates new parking request.
+ *          - Then follows the same assignment flow.
+ *       The pallet must be released, the customer must be approved, and the parking request must be in Pending or Accepted status.
  *     tags: [Operator]
  *     security:
  *       - bearerAuth: []
@@ -816,7 +824,6 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  *             type: object
  *             required:
  *               - palletId
- *               - parkingRequestId
  *             properties:
  *               palletId:
  *                 type: integer
@@ -826,8 +833,12 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  *               parkingRequestId:
  *                 type: integer
  *                 minimum: 1
- *                 description: ID of the parking request. Customer and car information will be retrieved from this request.
+ *                 description: ID of the parking request. Customer and car information will be retrieved from this request. Either parkingRequestId or carNumber must be provided.
  *                 example: 1
+ *               carNumber:
+ *                 type: string
+ *                 description: Car number. If provided, will create user/customer/car if needed and create parking request. Either parkingRequestId or carNumber must be provided.
+ *                 example: "ABC123456"
  *     responses:
  *       200:
  *         description: Pallet assigned to customer successfully
