@@ -1705,8 +1705,7 @@ router.post('/call-pallet-create-request', authorize('operator'), validateCallPa
  *                 type: string
  *                 minLength: 6
  *                 maxLength: 6
- *                 pattern: '^\d+$'
- *                 description: Last 6 digits of the car number (unique identifier)
+ *                 description: Last 6 characters of the car number (unique identifier)
  *                 example: "123456"
  *     responses:
  *       200:

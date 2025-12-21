@@ -137,9 +137,7 @@ const validateCallPalletByCarNumber = [
     .isString()
     .withMessage('Car number last 6 digits must be a string')
     .isLength({ min: 6, max: 6 })
-    .withMessage('Car number last 6 digits must be exactly 6 characters')
-    .matches(/^\d+$/)
-    .withMessage('Car number last 6 digits must contain only digits'),
+    .withMessage('Car number last 6 digits must be exactly 6 characters'),
   
   handleValidationErrors
 ];
