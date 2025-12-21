@@ -1423,8 +1423,8 @@ const callSpecificPallet = async (operatorUserId, palletId, requestId) => {
   }
 
   // Step 5: Validate request status (should be Pending)
-  if (request.Status !== 'Pending') {
-    throw new Error(`Cannot accept request with status: ${request.Status}. Only Pending requests can be accepted.`);
+  if (request.Status !== 'Pending' && request.Status !== 'Queued') {
+    throw new Error(`Cannot accept request with status: ${request.Status}. Only Pending and Queued requests can be accepted.`);
   }
 
   // Step 6: Find the pallet
