@@ -97,6 +97,8 @@ CREATE TABLE parking_system (
     TimeForEachLevel INT DEFAULT 0,  -- seconds
     TimeForHorizontalMove INT DEFAULT 0, -- seconds
     
+    Status ENUM('Idle', 'PalletMovingToGround', 'PalletMovingToParking', 'AtGround') DEFAULT 'Idle',
+    
     CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
@@ -152,7 +154,7 @@ CREATE TABLE request_queue (
     PalletAllotmentId INT NOT NULL,
     OperatorId INT NULL,
     
-    Status ENUM('Pending', 'Accepted', 'Started', 'Completed', 'Cancelled') DEFAULT 'Pending',
+    Status ENUM('Pending', 'Accepted', 'Queued', 'Completed', 'Cancelled') DEFAULT 'Pending',
     EstimatedTime INT DEFAULT 0, -- seconds
     
     CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -173,7 +175,7 @@ CREATE TABLE requests (
     PalletAllotmentId INT NOT NULL,
     OperatorId INT NULL,
     
-    Status ENUM('Pending', 'Accepted', 'Started', 'Completed', 'Cancelled') DEFAULT 'Pending',
+    Status ENUM('Pending', 'Accepted', 'Queued', 'Completed', 'Cancelled') DEFAULT 'Pending',
     EstimatedTime INT DEFAULT 0,
     
     CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -182,4 +184,26 @@ CREATE TABLE requests (
     FOREIGN KEY (UserId) REFERENCES users(Id),
     FOREIGN KEY (PalletAllotmentId) REFERENCES PalletDetails(Id),
     FOREIGN KEY (OperatorId) REFERENCES operators(Id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+------------------------------------------------------------
+-- PARKING REQUEST TABLE
+------------------------------------------------------------
+CREATE TABLE parking_requests (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    UserId INT NOT NULL,
+    ProjectId INT NOT NULL,
+    ParkingSystemId INT NOT NULL,
+    CarId INT NOT NULL,
+    
+    Status ENUM('Pending', 'Accepted', 'Queued', 'Completed', 'Cancelled') DEFAULT 'Pending',
+    
+    CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (UserId) REFERENCES users(Id),
+    FOREIGN KEY (ProjectId) REFERENCES projects(Id),
+    FOREIGN KEY (ParkingSystemId) REFERENCES parking_system(Id),
+    FOREIGN KEY (CarId) REFERENCES cars(Id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

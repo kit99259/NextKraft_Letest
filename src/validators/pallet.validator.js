@@ -21,16 +21,11 @@ const validateAssignPallet = [
     .isInt({ min: 1 })
     .withMessage('Pallet ID must be a valid integer'),
   
-  body('customerId')
+  body('parkingRequestId')
     .notEmpty()
-    .withMessage('Customer ID is required')
+    .withMessage('Parking Request ID is required')
     .isInt({ min: 1 })
-    .withMessage('Customer ID must be a valid integer'),
-  
-  body('carId')
-    .optional()
-    .isInt({ min: 1 })
-    .withMessage('Car ID must be a valid integer'),
+    .withMessage('Parking Request ID must be a valid integer'),
   
   handleValidationErrors
 ];
@@ -51,8 +46,57 @@ const validateUpdateRequestStatus = [
   body('status')
     .notEmpty()
     .withMessage('Status is required')
-    .isIn(['Pending', 'Accepted', 'Started', 'Completed', 'Cancelled'])
-    .withMessage('Status must be one of: Pending, Accepted, Started, Completed, Cancelled'),
+    .isIn(['Pending', 'Accepted', 'Queued', 'Completed', 'Cancelled'])
+    .withMessage('Status must be one of: Pending, Accepted, Queued, Completed, Cancelled'),
+  
+  handleValidationErrors
+];
+
+// Call empty pallet validation rules
+const validateCallEmptyPallet = [
+  body('customerId')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Customer ID must be a valid integer'),
+  
+  handleValidationErrors
+];
+
+// Update parking system status validation rules
+const validateUpdateParkingSystemStatus = [
+  body('status')
+    .notEmpty()
+    .withMessage('Status is required')
+    .isIn(['AtGround', 'Idle'])
+    .withMessage('Status must be one of: AtGround, Idle'),
+  
+  handleValidationErrors
+];
+
+// Release parked car validation rules
+const validateReleaseParkedCar = [
+  body('palletId')
+    .notEmpty()
+    .withMessage('Pallet ID is required')
+    .isInt({ min: 1 })
+    .withMessage('Pallet ID must be a valid integer'),
+  
+  handleValidationErrors
+];
+
+// Call specific pallet validation rules
+const validateCallSpecificPallet = [
+  body('palletId')
+    .notEmpty()
+    .withMessage('Pallet ID is required')
+    .isInt({ min: 1 })
+    .withMessage('Pallet ID must be a valid integer'),
+  
+  body('requestId')
+    .notEmpty()
+    .withMessage('Request ID is required')
+    .isInt({ min: 1 })
+    .withMessage('Request ID must be a valid integer'),
   
   handleValidationErrors
 ];
@@ -60,6 +104,10 @@ const validateUpdateRequestStatus = [
 module.exports = {
   validateAssignPallet,
   validateRequestCarRelease,
-  validateUpdateRequestStatus
+  validateUpdateRequestStatus,
+  validateCallEmptyPallet,
+  validateUpdateParkingSystemStatus,
+  validateReleaseParkedCar,
+  validateCallSpecificPallet
 };
 

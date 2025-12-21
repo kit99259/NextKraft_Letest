@@ -48,7 +48,7 @@ const Request = sequelize.define('Request', {
     }
   },
   Status: {
-    type: DataTypes.ENUM('Pending', 'Accepted', 'Started', 'Completed', 'Cancelled'),
+    type: DataTypes.ENUM('Pending', 'Accepted', 'Queued', 'Completed', 'Cancelled'),
     defaultValue: 'Pending'
   },
   EstimatedTime: {

@@ -522,7 +522,7 @@ const requestCarRelease = async (userId, palletId) => {
     where: {
       PalletAllotmentId: palletId,
       UserId: userId,
-      Status: ['Pending', 'Accepted', 'Started']
+      Status: ['Pending', 'Accepted', 'Queued']
     }
   });
 

@@ -594,7 +594,7 @@ router.get('/car/available', authenticate, customerController.getAvailableCarLis
  *                                     type: string
  *                               status:
  *                                 type: string
- *                                 enum: [Pending, Accepted, Started, Cancelled]
+ *                                 enum: [Pending, Accepted, Queued, Cancelled]
  *                                 description: Request status (Completed requests are excluded)
  *                               estimatedTime:
  *                                 type: integer
@@ -721,7 +721,7 @@ router.get('/pallet-status', authenticate, customerController.getCustomerPalletS
  *                               type: string
  *                         status:
  *                           type: string
- *                           enum: [Pending, Accepted, Started, Completed, Cancelled]
+ *                           enum: [Pending, Accepted, Queued, Completed, Cancelled]
  *                         estimatedTime:
  *                           type: integer
  *                           description: Estimated time in seconds
@@ -956,7 +956,7 @@ router.post('/release-car-request', authenticate, validateRequestCarRelease, cus
  *                                 type: string
  *                           status:
  *                             type: string
- *                             enum: [Pending, Accepted, Started, Completed, Cancelled]
+ *                             enum: [Pending, Accepted, Queued, Completed, Cancelled]
  *                           estimatedTime:
  *                             type: integer
  *                             description: Estimated time in seconds

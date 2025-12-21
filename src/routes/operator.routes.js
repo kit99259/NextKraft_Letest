@@ -5,7 +5,7 @@ const operatorController = require('../controllers/operator.controller');
 const parkingSystemController = require('../controllers/parkingSystem.controller');
 const parkingRequestController = require('../controllers/parkingRequest.controller');
 const { validateCreateOperator } = require('../validators/operator.validator');
-const { validateAssignPallet, validateUpdateRequestStatus } = require('../validators/pallet.validator');
+const { validateAssignPallet, validateUpdateRequestStatus, validateCallEmptyPallet, validateUpdateParkingSystemStatus, validateReleaseParkedCar, validateCallSpecificPallet } = require('../validators/pallet.validator');
 
 // All routes require authentication
 router.use(authenticate);
@@ -803,8 +803,8 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  * @swagger
  * /api/operator/assign-pallet:
  *   post:
- *     summary: Assign a customer to a specific pallet (Operator only)
- *     description: Assigns a customer and their car to a specific pallet. The pallet must be released and the customer must be approved.
+ *     summary: Assign a pallet to a customer based on parking request (Operator only)
+ *     description: Assigns a pallet to a customer based on their parking request. The pallet must be released, the customer must be approved, and the parking request must be in Pending or Accepted status. The customer and car information are retrieved from the parking request.
  *     tags: [Operator]
  *     security:
  *       - bearerAuth: []
@@ -816,22 +816,17 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  *             type: object
  *             required:
  *               - palletId
- *               - customerId
+ *               - parkingRequestId
  *             properties:
  *               palletId:
  *                 type: integer
  *                 minimum: 1
  *                 description: ID of the pallet to assign
  *                 example: 1
- *               customerId:
+ *               parkingRequestId:
  *                 type: integer
  *                 minimum: 1
- *                 description: ID of the customer to assign
- *                 example: 1
- *               carId:
- *                 type: integer
- *                 minimum: 1
- *                 description: ID of the car to assign (optional, will use customer's first car if not provided)
+ *                 description: ID of the parking request. Customer and car information will be retrieved from this request.
  *                 example: 1
  *     responses:
  *       200:
@@ -861,6 +856,10 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  *                           type: integer
  *                         level:
  *                           type: integer
+ *                           nullable: true
+ *                         levelBelowGround:
+ *                           type: integer
+ *                           nullable: true
  *                         column:
  *                           type: integer
  *                         userGivenPalletNumber:
@@ -896,6 +895,13 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  *                         updatedAt:
  *                           type: string
  *                           format: date-time
+ *                     timeToParking:
+ *                       type: integer
+ *                       description: Time to move pallet to parking position in seconds
+ *                     timeToParkingFormatted:
+ *                       type: string
+ *                       description: Time in human-readable format
+ *                       example: "5 minutes 30 seconds"
  *                     customer:
  *                       type: object
  *                       properties:
@@ -946,13 +952,13 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  *                         column:
  *                           type: integer
  *       400:
- *         description: Validation error, pallet already assigned, car already assigned, customer not approved, or customer has no cars
+ *         description: Validation error, pallet already assigned, car already assigned, customer not approved, parking request status invalid, or pallet does not belong to operator's parking system
  *       401:
  *         description: Unauthorized
  *       403:
  *         description: Forbidden - Operator access required
  *       404:
- *         description: Pallet, customer, or car not found
+ *         description: Pallet, parking request, customer, or car not found
  */
 router.post('/assign-pallet', authorize('operator'), validateAssignPallet, operatorController.assignPalletToCustomer);
 
@@ -1109,7 +1115,7 @@ router.post('/assign-pallet', authorize('operator'), validateAssignPallet, opera
  *                                 type: string
  *                           status:
  *                             type: string
- *                             enum: [Pending, Accepted, Started, Completed, Cancelled]
+ *                             enum: [Pending, Accepted, Queued, Completed, Cancelled]
  *                           estimatedTime:
  *                             type: integer
  *                             description: Estimated time in seconds
@@ -1164,7 +1170,7 @@ router.get('/requests', authorize('operator'), operatorController.getOperatorReq
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [Pending, Accepted, Started, Completed, Cancelled]
+ *                 enum: [Pending, Accepted, Queued, Completed, Cancelled]
  *                 description: New status for the request
  *                 example: "Completed"
  *     responses:
@@ -1306,7 +1312,7 @@ router.get('/requests', authorize('operator'), operatorController.getOperatorReq
  *                               type: string
  *                         status:
  *                           type: string
- *                           enum: [Pending, Accepted, Started, Completed, Cancelled]
+ *                           enum: [Pending, Accepted, Queued, Completed, Cancelled]
  *                         estimatedTime:
  *                           type: integer
  *                         estimatedTimeFormatted:
@@ -1329,6 +1335,399 @@ router.get('/requests', authorize('operator'), operatorController.getOperatorReq
  *         description: Request not found or not assigned to operator
  */
 router.put('/requests/:requestId/status', authorize('operator'), validateUpdateRequestStatus, operatorController.updateRequestStatus);
+
+/**
+ * @swagger
+ * /api/operator/call-empty-pallet:
+ *   post:
+ *     summary: Call empty pallet (Operator only)
+ *     description: |
+ *       For Tower parking: Finds the lowest empty pallet (not assigned to any customer).
+ *       For Puzzle parking: Calls the customer's assigned pallet (customerId required).
+ *       Returns pallet information and calculated time to call the empty pallet.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               customerId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: Required for Puzzle parking system. Optional for Tower.
+ *                 example: 1
+ *     responses:
+ *       200:
+ *         description: Empty pallet called successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     palletId:
+ *                       type: integer
+ *                       description: ID of the pallet
+ *                     palletNumber:
+ *                       type: string
+ *                       description: User-given pallet number
+ *                     level:
+ *                       type: integer
+ *                       nullable: true
+ *                       description: Level above ground
+ *                     levelBelowGround:
+ *                       type: integer
+ *                       nullable: true
+ *                       description: Level below ground (for Puzzle only)
+ *                     column:
+ *                       type: integer
+ *                       description: Column number
+ *                     timeToCall:
+ *                       type: integer
+ *                       description: Time to call empty pallet in seconds
+ *                     timeToCallFormatted:
+ *                       type: string
+ *                       description: Time in human-readable format
+ *                       example: "5 minutes 30 seconds"
+ *                     parkingSystem:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         type:
+ *                           type: string
+ *                           enum: [Tower, Puzzle]
+ *                         wingName:
+ *                           type: string
+ *                           nullable: true
+ *       400:
+ *         description: Validation error or invalid request
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator profile not found, no empty pallet available, or customer not found
+ */
+router.post('/call-empty-pallet', authorize('operator'), validateCallEmptyPallet, operatorController.callEmptyPallet);
+
+/**
+ * @swagger
+ * /api/operator/call-specific-pallet:
+ *   post:
+ *     summary: Call specific pallet and accept request (Operator only)
+ *     description: |
+ *       Calls a specific pallet by palletId and accepts the associated request (changes status to 'Accepted').
+ *       Calculates the time it will take to move the pallet to ground level (same calculation as callEmptyPallet).
+ *       Updates parking system status to 'PalletMovingToGround'.
+ *       Sends notification to the customer.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - palletId
+ *               - requestId
+ *             properties:
+ *               palletId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: ID of the pallet to call
+ *                 example: 123
+ *               requestId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: ID of the request to accept
+ *                 example: 456
+ *     responses:
+ *       200:
+ *         description: Specific pallet called and request accepted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     palletId:
+ *                       type: integer
+ *                       description: ID of the pallet
+ *                     palletNumber:
+ *                       type: string
+ *                       description: User-given pallet number
+ *                     level:
+ *                       type: integer
+ *                       nullable: true
+ *                       description: Level above ground
+ *                     levelBelowGround:
+ *                       type: integer
+ *                       nullable: true
+ *                       description: Level below ground (for Puzzle only)
+ *                     column:
+ *                       type: integer
+ *                       description: Column number
+ *                     timeToCall:
+ *                       type: integer
+ *                       description: Time to call pallet to ground in seconds
+ *                     timeToCallFormatted:
+ *                       type: string
+ *                       description: Time in human-readable format
+ *                       example: "5 minutes 30 seconds"
+ *                     request:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         status:
+ *                           type: string
+ *                           enum: [Accepted]
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *                     parkingSystem:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         type:
+ *                           type: string
+ *                           enum: [Tower, Puzzle]
+ *                         wingName:
+ *                           type: string
+ *                           nullable: true
+ *       400:
+ *         description: Validation error, invalid request status, or pallet does not belong to operator's parking system
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator profile not found, pallet not found, or request not found
+ */
+router.post('/call-specific-pallet', authorize('operator'), validateCallSpecificPallet, operatorController.callSpecificPallet);
+
+/**
+ * @swagger
+ * /api/operator/parking-system/status:
+ *   put:
+ *     summary: Update parking system status (Operator only)
+ *     description: Updates the parking system status to 'AtGround' or 'Idle'. Operators can use this to indicate when a pallet has reached the ground level or when the system is idle.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [AtGround, Idle]
+ *                 description: New status for the parking system
+ *                 example: "AtGround"
+ *     responses:
+ *       200:
+ *         description: Parking system status updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     parkingSystem:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         wingName:
+ *                           type: string
+ *                           nullable: true
+ *                         type:
+ *                           type: string
+ *                           enum: [Tower, Puzzle]
+ *                         level:
+ *                           type: integer
+ *                         levelBelowGround:
+ *                           type: integer
+ *                           nullable: true
+ *                         column:
+ *                           type: integer
+ *                         status:
+ *                           type: string
+ *                           enum: [Idle, PalletMovingToGround, PalletMovingToParking, AtGround]
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *       400:
+ *         description: Validation error, invalid status, or operator not assigned to parking system
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator profile not found
+ */
+router.put('/parking-system/status', authorize('operator'), validateUpdateParkingSystemStatus, operatorController.updateParkingSystemStatus);
+
+/**
+ * @swagger
+ * /api/operator/release-parked-car:
+ *   post:
+ *     summary: Release parked car (Operator only)
+ *     description: |
+ *       Releases a parked car from a pallet. This will:
+ *       - Find the active request associated with the pallet
+ *       - Set the request status to 'Completed'
+ *       - Release the pallet (set UserId to 0, CarId to null, Status to 'Released')
+ *       - Move the request to request_queue table as history
+ *       - Delete the request from requests table
+ *       - Send notification to the customer
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - palletId
+ *             properties:
+ *               palletId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: ID of the pallet from which to release the car
+ *                 example: 123
+ *     responses:
+ *       200:
+ *         description: Car released successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     pallet:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         userId:
+ *                           type: integer
+ *                           description: Will be 0 after release
+ *                         projectId:
+ *                           type: integer
+ *                         parkingSystemId:
+ *                           type: integer
+ *                         level:
+ *                           type: integer
+ *                           nullable: true
+ *                         levelBelowGround:
+ *                           type: integer
+ *                           nullable: true
+ *                         column:
+ *                           type: integer
+ *                         userGivenPalletNumber:
+ *                           type: string
+ *                         carId:
+ *                           type: integer
+ *                           nullable: true
+ *                           description: Will be null after release
+ *                         status:
+ *                           type: string
+ *                           enum: [Released]
+ *                           description: Will be 'Released' after release
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                         updatedAt:
+ *                           type: string
+ *                           format: date-time
+ *                     parkingSystem:
+ *                       type: object
+ *                       nullable: true
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         wingName:
+ *                           type: string
+ *                         type:
+ *                           type: string
+ *                           enum: [Tower, Puzzle]
+ *                         level:
+ *                           type: integer
+ *                         column:
+ *                           type: integer
+ *                     project:
+ *                       type: object
+ *                       nullable: true
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         projectName:
+ *                           type: string
+ *                         societyName:
+ *                           type: string
+ *                     timeToCall:
+ *                       type: integer
+ *                       description: Time to move pallet to ground level in seconds
+ *                     timeToCallFormatted:
+ *                       type: string
+ *                       description: Time in human-readable format
+ *                       example: "5 minutes 30 seconds"
+ *                     message:
+ *                       type: string
+ *                       description: Success message
+ *       400:
+ *         description: Validation error, pallet not assigned, or pallet does not belong to operator's parking system
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator profile not found, pallet not found, or no active request found
+ */
+router.post('/release-parked-car', authorize('operator'), validateReleaseParkedCar, operatorController.releaseParkedCar);
 
 module.exports = router;
 

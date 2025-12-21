@@ -74,6 +74,7 @@ const createParkingSystem = async (parkingSystemData) => {
       timeForEachLevel: parkingSystem.TimeForEachLevel,
       timeForHorizontalMove: parkingSystem.TimeForHorizontalMove,
       bufferTime: parkingSystem.BufferTime,
+      status: parkingSystem.Status,
       createdAt: parkingSystem.CreatedAt,
       updatedAt: parkingSystem.UpdatedAt
     },
@@ -104,6 +105,7 @@ const getProjectListWithParkingSystems = async () => {
           'TimeForEachLevel',
           'TimeForHorizontalMove',
           'BufferTime',
+          'Status',
           'CreatedAt',
           'UpdatedAt'
         ]
@@ -129,6 +131,7 @@ const getProjectListWithParkingSystems = async () => {
       timeForEachLevel: parkingSystem.TimeForEachLevel,
       timeForHorizontalMove: parkingSystem.TimeForHorizontalMove,
       bufferTime: parkingSystem.BufferTime,
+      status: parkingSystem.Status,
       createdAt: parkingSystem.CreatedAt,
       updatedAt: parkingSystem.UpdatedAt
     })) : []
@@ -207,7 +210,8 @@ const getPalletDetails = async (projectId, parkingSystemId) => {
       totalNumberOfPallet: parkingSystem.TotalNumberOfPallet,
       timeForEachLevel: parkingSystem.TimeForEachLevel,
       timeForHorizontalMove: parkingSystem.TimeForHorizontalMove,
-      bufferTime: parkingSystem.BufferTime
+      bufferTime: parkingSystem.BufferTime,
+      status: parkingSystem.Status
     },
     palletDetails: palletDetails.map(pallet => ({
       id: pallet.Id,
@@ -498,6 +502,7 @@ const getProjectDetailsWithParkingSystemAndPallets = async (projectId) => {
       timeForEachLevel: parkingSystem.TimeForEachLevel,
       timeForHorizontalMove: parkingSystem.TimeForHorizontalMove,
       bufferTime: parkingSystem.BufferTime,
+      status: parkingSystem.Status,
       createdAt: parkingSystem.CreatedAt,
       updatedAt: parkingSystem.UpdatedAt
     },

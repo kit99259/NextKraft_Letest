@@ -309,7 +309,7 @@ const getOperatorProjectWithParkingSystems = async (userId) => {
 };
 
 // Assign Pallet to Customer Service
-const assignPalletToCustomer = async (operatorUserId, palletId, customerId, carId) => {
+const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId) => {
   // Step 1: Validate operator exists and get operator details
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId }
@@ -319,7 +319,82 @@ const assignPalletToCustomer = async (operatorUserId, palletId, customerId, carI
     throw new Error('Operator profile not found');
   }
 
-  // Step 2: Find the pallet
+  // Step 2: Validate operator has parking system assigned
+  if (!operator.ParkingSystemId || !operator.ProjectId) {
+    throw new Error('Operator is not assigned to a project and parking system');
+  }
+
+  // Step 3: Find the parking request
+  const parkingRequest = await ParkingRequest.findOne({
+    where: {
+      Id: parkingRequestId,
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId
+    },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      },
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+      }
+    ]
+  });
+
+  if (!parkingRequest) {
+    throw new Error('Parking request not found or does not belong to your parking system');
+  }
+
+  // Step 4: Validate parking request status (should be Pending or Accepted)
+  if (!['Pending', 'Accepted'].includes(parkingRequest.Status)) {
+    throw new Error(`Cannot assign pallet to a parking request with status: ${parkingRequest.Status}`);
+  }
+
+  // Step 5: Find customer from parking request
+  const customer = await Customer.findOne({
+    where: {
+      UserId: parkingRequest.UserId,
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId
+    },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      }
+    ]
+  });
+
+  if (!customer) {
+    throw new Error('Customer not found for this parking request');
+  }
+
+  // Step 6: Validate customer is approved
+  if (customer.Status !== 'Approved') {
+    throw new Error('Customer is not approved. Only approved customers can be assigned to pallets');
+  }
+
+  // Step 7: Get car from parking request
+  const car = parkingRequest.car;
+  if (!car) {
+    throw new Error('Car not found in parking request');
+  }
+
+  // Step 8: Get parking system with time information
+  const parkingSystem = await ParkingSystem.findByPk(operator.ParkingSystemId, {
+    attributes: ['Id', 'WingName', 'Type', 'Level', 'LevelBelowGround', 'Column', 'TimeForEachLevel', 'TimeForHorizontalMove', 'BufferTime']
+  });
+
+  if (!parkingSystem) {
+    throw new Error('Parking system not found');
+  }
+
+  // Step 9: Find the pallet
   const pallet = await PalletAllotment.findByPk(palletId, {
     include: [
       {
@@ -339,72 +414,72 @@ const assignPalletToCustomer = async (operatorUserId, palletId, customerId, carI
     throw new Error('Pallet not found');
   }
 
-  // Step 3: Validate pallet is released (not already assigned)
+  // Step 10: Validate pallet belongs to operator's parking system
+  if (pallet.ParkingSystemId !== operator.ParkingSystemId) {
+    throw new Error('Pallet does not belong to your parking system');
+  }
+
+  // Step 11: Validate pallet is released (not already assigned)
   if (pallet.Status === 'Assigned' && pallet.UserId !== 0) {
     throw new Error('Pallet is already assigned to another customer');
   }
 
-  // Step 4: Validate operator has access to this project
+  // Step 12: Validate pallet belongs to the same project
   if (operator.ProjectId !== pallet.ProjectId) {
     throw new Error('Operator does not have access to this project');
   }
 
-  // Step 5: Find customer
-  const customer = await Customer.findByPk(customerId, {
-    include: [
-      {
-        model: User,
-        as: 'user',
-        attributes: ['Id', 'Username', 'Role']
+  // Step 13: Calculate time to move pallet to parking (same logic as callEmptyPallet)
+  let timeToParking = 0;
+  
+  if (parkingSystem.Type === 'Tower') {
+    // For Tower: (Level * TimePerLevel) + BufferTime
+    timeToParking = (pallet.Level * parkingSystem.TimeForEachLevel) + parkingSystem.BufferTime;
+  } else if (parkingSystem.Type === 'Puzzle') {
+    // For Puzzle: Calculate based on pallet location
+    if (pallet.Level !== null && pallet.Level !== undefined && pallet.LevelBelowGround === null) {
+      // Pallet has Level and Column (above ground)
+      // Time = (Level * TimePerLevel) + HorizontalMoveTime + BufferTime
+      // HorizontalMoveTime is NOT applicable for Level 1
+      timeToParking = (pallet.Level * parkingSystem.TimeForEachLevel) + 
+                     (pallet.Level > 1 ? parkingSystem.TimeForHorizontalMove : 0) + 
+                     parkingSystem.BufferTime;
+    } else if (pallet.LevelBelowGround !== null && pallet.LevelBelowGround !== undefined) {
+      // Pallet has LevelBelowGround and Column (below ground)
+      if (pallet.LevelBelowGround === 1) {
+        // LevelBelowGround 1: Only (LevelBelowGround * TimePerLevel) + BufferTime
+        timeToParking = (pallet.LevelBelowGround * parkingSystem.TimeForEachLevel) + parkingSystem.BufferTime;
+      } else {
+        // LevelBelowGround > 1: (LevelBelowGround * TimePerLevel) + ((LevelBelowGround * TimePerLevel) + HorizontalMoveTime + BufferTime)
+        timeToParking = (pallet.LevelBelowGround * parkingSystem.TimeForEachLevel) + 
+                       ((pallet.LevelBelowGround * parkingSystem.TimeForEachLevel) + 
+                        parkingSystem.TimeForHorizontalMove + 
+                        parkingSystem.BufferTime);
       }
-    ]
-  });
-
-  if (!customer) {
-    throw new Error('Customer not found');
-  }
-
-  // Step 6: Validate customer is approved
-  if (customer.Status !== 'Approved') {
-    throw new Error('Customer is not approved. Only approved customers can be assigned to pallets');
-  }
-
-  // Step 7: Validate customer belongs to the same project
-  if (customer.ProjectId !== pallet.ProjectId) {
-    throw new Error('Customer does not belong to the same project as the pallet');
-  }
-
-  // Step 8: Get or validate car
-  let car = null;
-  if (carId) {
-    car = await Car.findOne({
-      where: {
-        Id: carId,
-        UserId: customer.UserId
-      }
-    });
-
-    if (!car) {
-      throw new Error('Car not found or does not belong to the customer');
-    }
-  } else {
-    // If carId not provided, get customer's first car
-    car = await Car.findOne({
-      where: { UserId: customer.UserId },
-      order: [['CreatedAt', 'ASC']]
-    });
-
-    if (!car) {
-      throw new Error('Customer has no cars. Please provide a car ID or add a car first');
+    } else {
+      throw new Error('Pallet location information is invalid');
     }
   }
 
-  // Step 9: Check if car is already assigned to another pallet
+  // Format time in human-readable format
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    if (minutes > 0 && remainingSeconds > 0) {
+      return `${minutes} minute${minutes > 1 ? 's' : ''} ${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
+    } else if (minutes > 0) {
+      return `${minutes} minute${minutes > 1 ? 's' : ''}`;
+    } else {
+      return `${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
+    }
+  };
+
+  // Step 14: Check if car is already assigned to another pallet
   const existingPalletAssignment = await PalletAllotment.findOne({
     where: {
       CarId: car.Id,
       Status: 'Assigned',
-      Id: { [require('sequelize').Op.ne]: palletId } // Exclude current pallet
+      Id: { [Op.ne]: palletId } // Exclude current pallet
     }
   });
 
@@ -412,7 +487,7 @@ const assignPalletToCustomer = async (operatorUserId, palletId, customerId, carI
     throw new Error('Car is already assigned to another pallet');
   }
 
-  // Step 10: Update pallet with customer and car information
+  // Step 15: Update pallet with customer and car information
   const istTime = getISTTime();
 
   await pallet.update({
@@ -422,17 +497,21 @@ const assignPalletToCustomer = async (operatorUserId, palletId, customerId, carI
     UpdatedAt: istTime
   });
 
-  // Step 10.1: Mark active parking requests for this user and car as completed
-  await ParkingRequest.update(
+  // Step 15.1: Mark the specific parking request as completed
+  await parkingRequest.update({
+    Status: 'Completed',
+    UpdatedAt: istTime
+  });
+
+  // Step 15.2: Update parking system status to 'PalletMovingToParking'
+  await ParkingSystem.update(
     {
-      Status: 'Completed',
+      Status: 'PalletMovingToParking',
       UpdatedAt: istTime
     },
     {
       where: {
-        UserId: customer.UserId,
-        CarId: car.Id,
-        Status: { [Op.notIn]: ['Completed', 'Cancelled'] }
+        Id: operator.ParkingSystemId
       }
     }
   );
@@ -477,8 +556,9 @@ const assignPalletToCustomer = async (operatorUserId, palletId, customerId, carI
       {
         type: 'pallet_assigned',
         palletId: palletId.toString(),
-        customerId: customerId.toString(),
-        carId: car ? car.Id.toString() : null
+        customerId: customer.Id.toString(),
+        carId: car ? car.Id.toString() : null,
+        parkingRequestId: parkingRequestId.toString()
       }
     );
   }
@@ -490,6 +570,7 @@ const assignPalletToCustomer = async (operatorUserId, palletId, customerId, carI
       projectId: pallet.ProjectId,
       parkingSystemId: pallet.ParkingSystemId,
       level: pallet.Level,
+      levelBelowGround: pallet.LevelBelowGround,
       column: pallet.Column,
       userGivenPalletNumber: pallet.UserGivenPalletNumber,
       carId: pallet.CarId,
@@ -508,6 +589,8 @@ const assignPalletToCustomer = async (operatorUserId, palletId, customerId, carI
       createdAt: pallet.CreatedAt,
       updatedAt: pallet.UpdatedAt
     },
+    timeToParking: timeToParking,
+    timeToParkingFormatted: formatTime(timeToParking),
     customer: {
       id: customer.Id,
       userId: customer.UserId,
@@ -610,7 +693,7 @@ const getOperatorRequests = async (operatorUserId) => {
       }
     ],
     order: [
-      ['Status', 'ASC'], // Order by status: Pending first, then Accepted, Started, Completed, Cancelled
+      ['Status', 'ASC'], // Order by status: Pending first, then Accepted, Queued, Completed, Cancelled
       ['CreatedAt', 'DESC'] // Then by creation date (newest first)
     ]
   });
@@ -727,9 +810,9 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
 
   // Step 3: Validate status transition
   const validTransitions = {
-    'Pending': ['Accepted', 'Cancelled'],
-    'Accepted': ['Started', 'Cancelled'],
-    'Started': ['Completed', 'Cancelled'],
+    'Pending': ['Accepted', 'Queued', 'Cancelled'],
+    'Accepted': ['Queued', 'Completed', 'Cancelled'],
+    'Queued': ['Completed', 'Cancelled'],
     'Completed': [], // Cannot change from Completed
     'Cancelled': [] // Cannot change from Cancelled
   };
@@ -835,7 +918,7 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
   if (request.user) {
     const statusMessages = {
       'Accepted': 'Your car release request has been accepted by the operator',
-      'Started': 'The operator has started processing your car release request',
+      'Queued': 'Your car release request has been queued for processing',
       'Completed': 'Your car has been released successfully',
       'Cancelled': 'Your car release request has been cancelled'
     };
@@ -1133,6 +1216,648 @@ const approveCustomer = async (operatorUserId, customerId) => {
   };
 };
 
+// Call Empty Pallet Service
+const callEmptyPallet = async (operatorUserId, customerId = null) => {
+  // Step 1: Find operator by userId
+  const operator = await Operator.findOne({
+    where: { UserId: operatorUserId },
+    include: [
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'Type', 'Level', 'LevelBelowGround', 'Column', 'TimeForEachLevel', 'TimeForHorizontalMove', 'BufferTime']
+      }
+    ]
+  });
+
+  if (!operator) {
+    throw new Error('Operator profile not found');
+  }
+
+  // Step 2: Validate operator has parking system assigned
+  if (!operator.ParkingSystemId || !operator.parkingSystem) {
+    throw new Error('Operator is not assigned to a parking system');
+  }
+
+  const parkingSystem = operator.parkingSystem;
+  let pallet = null;
+  let timeToCall = 0;
+
+  // Step 3: Handle based on parking system type
+  if (parkingSystem.Type === 'Tower') {
+    // For Tower: Find lowest empty pallet (UserId = 0 and CarId IS NULL)
+    pallet = await PalletAllotment.findOne({
+      where: {
+        ParkingSystemId: parkingSystem.Id,
+        UserId: 0,
+        CarId: null,
+        Status: 'Released'
+      },
+      order: [
+        ['Level', 'ASC'],
+        ['Column', 'ASC']
+      ]
+    });
+
+    if (!pallet) {
+      throw new Error('No empty pallet available in Tower parking system');
+    }
+
+    // Calculate time: (Level * TimePerLevel) + BufferTime
+    timeToCall = (pallet.Level * parkingSystem.TimeForEachLevel) + parkingSystem.BufferTime;
+
+  } else if (parkingSystem.Type === 'Puzzle') {
+    // For Puzzle: Get customer's assigned pallet
+    if (!customerId) {
+      throw new Error('Customer ID is required for Puzzle parking system');
+    }
+
+    // Find customer
+    const customer = await Customer.findOne({
+      where: {
+        Id: customerId,
+        ProjectId: operator.ProjectId,
+        ParkingSystemId: parkingSystem.Id
+      }
+    });
+
+    if (!customer) {
+      throw new Error('Customer not found or does not belong to this parking system');
+    }
+
+    // Find customer's assigned pallet
+    pallet = await PalletAllotment.findOne({
+      where: {
+        ParkingSystemId: parkingSystem.Id,
+        UserId: customer.UserId,
+        Status: 'Assigned'
+      }
+    });
+
+    if (!pallet) {
+      throw new Error('Customer does not have an assigned pallet');
+    }
+
+    // Calculate time based on pallet location
+    if (pallet.Level !== null && pallet.Level !== undefined && pallet.LevelBelowGround === null) {
+      // Pallet has Level and Column (above ground)
+      // Time = (Level * TimePerLevel) + HorizontalMoveTime + BufferTime
+      // HorizontalMoveTime is NOT applicable for Level 1
+      timeToCall = (pallet.Level * parkingSystem.TimeForEachLevel) + 
+                   (pallet.Level > 1 ? parkingSystem.TimeForHorizontalMove : 0) + 
+                   parkingSystem.BufferTime;
+    } else if (pallet.LevelBelowGround !== null && pallet.LevelBelowGround !== undefined) {
+      // Pallet has LevelBelowGround and Column (below ground)
+      // Time = (LevelBelowGround * TimePerLevel) + ((LevelBelowGround * TimePerLevel) + HorizontalMoveTime + BufferTime)
+      // HorizontalMoveTime is NOT applicable for LevelBelowGround 1
+      // Second (LevelBelowGround * TimePerLevel) is NOT applicable for LevelBelowGround 1
+      if (pallet.LevelBelowGround === 1) {
+        // LevelBelowGround 1: Only (LevelBelowGround * TimePerLevel) + BufferTime
+        timeToCall = (pallet.LevelBelowGround * parkingSystem.TimeForEachLevel) + parkingSystem.BufferTime;
+      } else {
+        // LevelBelowGround > 1: (LevelBelowGround * TimePerLevel) + ((LevelBelowGround * TimePerLevel) + HorizontalMoveTime + BufferTime)
+        timeToCall = (pallet.LevelBelowGround * parkingSystem.TimeForEachLevel) + 
+                     ((pallet.LevelBelowGround * parkingSystem.TimeForEachLevel) + 
+                      parkingSystem.TimeForHorizontalMove + 
+                      parkingSystem.BufferTime);
+      }
+    } else {
+      throw new Error('Pallet location information is invalid');
+    }
+  } else {
+    throw new Error('Invalid parking system type');
+  }
+
+  // Step 4: Update parking system status to 'PalletMovingToGround'
+  const istTime = getISTTime();
+  await ParkingSystem.update(
+    {
+      Status: 'PalletMovingToGround',
+      UpdatedAt: istTime
+    },
+    {
+      where: {
+        Id: parkingSystem.Id
+      }
+    }
+  );
+
+  // Step 5: Format time in human-readable format
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    if (minutes > 0 && remainingSeconds > 0) {
+      return `${minutes} minute${minutes > 1 ? 's' : ''} ${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
+    } else if (minutes > 0) {
+      return `${minutes} minute${minutes > 1 ? 's' : ''}`;
+    } else {
+      return `${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
+    }
+  };
+
+  return {
+    palletId: pallet.Id,
+    palletNumber: pallet.UserGivenPalletNumber,
+    level: pallet.Level,
+    levelBelowGround: pallet.LevelBelowGround,
+    column: pallet.Column,
+    timeToCall: timeToCall,
+    timeToCallFormatted: formatTime(timeToCall),
+    parkingSystem: {
+      id: parkingSystem.Id,
+      type: parkingSystem.Type,
+      wingName: parkingSystem.WingName || null
+    }
+  };
+};
+
+// Call Specific Pallet Service
+const callSpecificPallet = async (operatorUserId, palletId, requestId) => {
+  // Step 1: Find operator by userId
+  const operator = await Operator.findOne({
+    where: { UserId: operatorUserId },
+    include: [
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'Type', 'Level', 'LevelBelowGround', 'Column', 'TimeForEachLevel', 'TimeForHorizontalMove', 'BufferTime']
+      }
+    ]
+  });
+
+  if (!operator) {
+    throw new Error('Operator profile not found');
+  }
+
+  // Step 2: Validate operator has parking system assigned
+  if (!operator.ParkingSystemId || !operator.parkingSystem) {
+    throw new Error('Operator is not assigned to a parking system');
+  }
+
+  // Step 3: Validate operator has project assigned
+  if (!operator.ProjectId) {
+    throw new Error('Operator is not assigned to a project');
+  }
+
+  const parkingSystem = operator.parkingSystem;
+
+  // Step 4: Find the request
+  const request = await Request.findOne({
+    where: {
+      Id: requestId,
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId,
+      PalletAllotmentId: palletId
+    },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      }
+    ]
+  });
+
+  if (!request) {
+    throw new Error('Request not found or does not match the pallet');
+  }
+
+  // Step 5: Validate request status (should be Pending)
+  if (request.Status !== 'Pending') {
+    throw new Error(`Cannot accept request with status: ${request.Status}. Only Pending requests can be accepted.`);
+  }
+
+  // Step 6: Find the pallet
+  const pallet = await PalletAllotment.findByPk(palletId, {
+    include: [
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      }
+    ]
+  });
+
+  if (!pallet) {
+    throw new Error('Pallet not found');
+  }
+
+  // Step 7: Validate pallet belongs to operator's parking system
+  if (pallet.ParkingSystemId !== operator.ParkingSystemId) {
+    throw new Error('Pallet does not belong to your parking system');
+  }
+
+  // Step 8: Calculate time based on pallet location (same logic as callEmptyPallet)
+  let timeToCall = 0;
+
+  if (parkingSystem.Type === 'Tower') {
+    // For Tower: (Level * TimePerLevel) + BufferTime
+    timeToCall = (pallet.Level * parkingSystem.TimeForEachLevel) + parkingSystem.BufferTime;
+  } else if (parkingSystem.Type === 'Puzzle') {
+    // For Puzzle: Calculate based on pallet location
+    if (pallet.Level !== null && pallet.Level !== undefined && pallet.LevelBelowGround === null) {
+      // Pallet has Level and Column (above ground)
+      // Time = (Level * TimePerLevel) + HorizontalMoveTime + BufferTime
+      // HorizontalMoveTime is NOT applicable for Level 1
+      timeToCall = (pallet.Level * parkingSystem.TimeForEachLevel) + 
+                   (pallet.Level > 1 ? parkingSystem.TimeForHorizontalMove : 0) + 
+                   parkingSystem.BufferTime;
+    } else if (pallet.LevelBelowGround !== null && pallet.LevelBelowGround !== undefined) {
+      // Pallet has LevelBelowGround and Column (below ground)
+      if (pallet.LevelBelowGround === 1) {
+        // LevelBelowGround 1: Only (LevelBelowGround * TimePerLevel) + BufferTime
+        timeToCall = (pallet.LevelBelowGround * parkingSystem.TimeForEachLevel) + parkingSystem.BufferTime;
+      } else {
+        // LevelBelowGround > 1: (LevelBelowGround * TimePerLevel) + ((LevelBelowGround * TimePerLevel) + HorizontalMoveTime + BufferTime)
+        timeToCall = (pallet.LevelBelowGround * parkingSystem.TimeForEachLevel) + 
+                     ((pallet.LevelBelowGround * parkingSystem.TimeForEachLevel) + 
+                      parkingSystem.TimeForHorizontalMove + 
+                      parkingSystem.BufferTime);
+      }
+    } else {
+      throw new Error('Pallet location information is invalid');
+    }
+  } else {
+    throw new Error('Invalid parking system type');
+  }
+
+  // Step 9: Update request status to 'Accepted'
+  const istTime = getISTTime();
+  await request.update({
+    Status: 'Accepted',
+    UpdatedAt: istTime
+  });
+
+  // Step 10: Update parking system status to 'PalletMovingToGround'
+  await ParkingSystem.update(
+    {
+      Status: 'PalletMovingToGround',
+      UpdatedAt: istTime
+    },
+    {
+      where: {
+        Id: parkingSystem.Id
+      }
+    }
+  );
+
+  // Step 11: Format time in human-readable format
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    if (minutes > 0 && remainingSeconds > 0) {
+      return `${minutes} minute${minutes > 1 ? 's' : ''} ${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
+    } else if (minutes > 0) {
+      return `${minutes} minute${minutes > 1 ? 's' : ''}`;
+    } else {
+      return `${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
+    }
+  };
+
+  const timeToCallFormatted = formatTime(timeToCall);
+
+  // Step 12: Send notification to customer with estimated time
+  if (request.user) {
+    await notificationService.sendNotificationToUser(
+      request.UserId,
+      'Request Accepted',
+      `Your car release request has been accepted. Pallet is being moved to ground level. Estimated time: ${timeToCallFormatted}.`,
+      {
+        type: 'request_accepted',
+        requestId: requestId.toString(),
+        palletId: palletId.toString(),
+        estimatedTime: timeToCall,
+        estimatedTimeFormatted: timeToCallFormatted
+      }
+    );
+  }
+
+  return {
+    palletId: pallet.Id,
+    palletNumber: pallet.UserGivenPalletNumber,
+    level: pallet.Level,
+    levelBelowGround: pallet.LevelBelowGround,
+    column: pallet.Column,
+    timeToCall: timeToCall,
+    timeToCallFormatted: timeToCallFormatted,
+    request: {
+      id: request.Id,
+      status: request.Status,
+      updatedAt: request.UpdatedAt
+    },
+    parkingSystem: {
+      id: parkingSystem.Id,
+      type: parkingSystem.Type,
+      wingName: parkingSystem.WingName || null
+    }
+  };
+};
+
+// Update Parking System Status Service
+const updateParkingSystemStatus = async (operatorUserId, status) => {
+  // Step 1: Validate status
+  const validStatuses = ['AtGround', 'Idle'];
+  if (!validStatuses.includes(status)) {
+    throw new Error(`Invalid status. Status must be one of: ${validStatuses.join(', ')}`);
+  }
+
+  // Step 2: Find operator by userId
+  const operator = await Operator.findOne({
+    where: { UserId: operatorUserId },
+    include: [
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Status']
+      }
+    ]
+  });
+
+  if (!operator) {
+    throw new Error('Operator profile not found');
+  }
+
+  // Step 3: Validate operator has parking system assigned
+  if (!operator.ParkingSystemId || !operator.parkingSystem) {
+    throw new Error('Operator is not assigned to a parking system');
+  }
+
+  const parkingSystem = operator.parkingSystem;
+
+  // Step 4: Update parking system status
+  const istTime = getISTTime();
+  await ParkingSystem.update(
+    {
+      Status: status,
+      UpdatedAt: istTime
+    },
+    {
+      where: {
+        Id: parkingSystem.Id
+      }
+    }
+  );
+
+  // Step 5: Reload parking system to get updated data
+  const updatedParkingSystem = await ParkingSystem.findByPk(parkingSystem.Id, {
+    attributes: ['Id', 'WingName', 'Type', 'Level', 'LevelBelowGround', 'Column', 'Status', 'CreatedAt', 'UpdatedAt']
+  });
+
+  return {
+    parkingSystem: {
+      id: updatedParkingSystem.Id,
+      wingName: updatedParkingSystem.WingName,
+      type: updatedParkingSystem.Type,
+      level: updatedParkingSystem.Level,
+      levelBelowGround: updatedParkingSystem.LevelBelowGround,
+      column: updatedParkingSystem.Column,
+      status: updatedParkingSystem.Status,
+      createdAt: updatedParkingSystem.CreatedAt,
+      updatedAt: updatedParkingSystem.UpdatedAt
+    }
+  };
+};
+
+// Release Parked Car Service
+const releaseParkedCar = async (operatorUserId, palletId) => {
+  // Step 1: Find operator by userId
+  const operator = await Operator.findOne({
+    where: { UserId: operatorUserId }
+  });
+
+  if (!operator) {
+    throw new Error('Operator profile not found');
+  }
+
+  // Step 2: Validate operator has project and parking system assigned
+  if (!operator.ProjectId || !operator.ParkingSystemId) {
+    throw new Error('Operator is not assigned to a project and parking system');
+  }
+
+  // Step 3: Get parking system with time information
+  const parkingSystem = await ParkingSystem.findByPk(operator.ParkingSystemId, {
+    attributes: ['Id', 'WingName', 'Type', 'Level', 'LevelBelowGround', 'Column', 'TimeForEachLevel', 'TimeForHorizontalMove', 'BufferTime']
+  });
+
+  if (!parkingSystem) {
+    throw new Error('Parking system not found');
+  }
+
+  // Step 4: Find the pallet
+  const pallet = await PalletAllotment.findByPk(palletId, {
+    include: [
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      },
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      }
+    ]
+  });
+
+  if (!pallet) {
+    throw new Error('Pallet not found');
+  }
+
+  // Step 5: Validate pallet belongs to operator's parking system
+  if (pallet.ParkingSystemId !== operator.ParkingSystemId) {
+    throw new Error('Pallet does not belong to your parking system');
+  }
+
+  // Step 6: Validate pallet is assigned (has a customer)
+  if (pallet.Status !== 'Assigned' || pallet.UserId === 0 || !pallet.CarId) {
+    throw new Error('Pallet is not assigned to any customer or car');
+  }
+
+  // Step 7: Calculate time to move pallet to ground (same logic as callSpecificPallet)
+  let timeToCall = 0;
+
+  if (parkingSystem.Type === 'Tower') {
+    // For Tower: (Level * TimePerLevel) + BufferTime
+    timeToCall = (pallet.Level * parkingSystem.TimeForEachLevel) + parkingSystem.BufferTime;
+  } else if (parkingSystem.Type === 'Puzzle') {
+    // For Puzzle: Calculate based on pallet location
+    if (pallet.Level !== null && pallet.Level !== undefined && pallet.LevelBelowGround === null) {
+      // Pallet has Level and Column (above ground)
+      // Time = (Level * TimePerLevel) + HorizontalMoveTime + BufferTime
+      // HorizontalMoveTime is NOT applicable for Level 1
+      timeToCall = (pallet.Level * parkingSystem.TimeForEachLevel) + 
+                   (pallet.Level > 1 ? parkingSystem.TimeForHorizontalMove : 0) + 
+                   parkingSystem.BufferTime;
+    } else if (pallet.LevelBelowGround !== null && pallet.LevelBelowGround !== undefined) {
+      // Pallet has LevelBelowGround and Column (below ground)
+      if (pallet.LevelBelowGround === 1) {
+        // LevelBelowGround 1: Only (LevelBelowGround * TimePerLevel) + BufferTime
+        timeToCall = (pallet.LevelBelowGround * parkingSystem.TimeForEachLevel) + parkingSystem.BufferTime;
+      } else {
+        // LevelBelowGround > 1: (LevelBelowGround * TimePerLevel) + ((LevelBelowGround * TimePerLevel) + HorizontalMoveTime + BufferTime)
+        timeToCall = (pallet.LevelBelowGround * parkingSystem.TimeForEachLevel) + 
+                     ((pallet.LevelBelowGround * parkingSystem.TimeForEachLevel) + 
+                      parkingSystem.TimeForHorizontalMove + 
+                      parkingSystem.BufferTime);
+      }
+    } else {
+      throw new Error('Pallet location information is invalid');
+    }
+  }
+
+  // Format time in human-readable format
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    if (minutes > 0 && remainingSeconds > 0) {
+      return `${minutes} minute${minutes > 1 ? 's' : ''} ${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
+    } else if (minutes > 0) {
+      return `${minutes} minute${minutes > 1 ? 's' : ''}`;
+    } else {
+      return `${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
+    }
+  };
+
+  // Step 8: Find the request associated with this pallet
+  const request = await Request.findOne({
+    where: {
+      PalletAllotmentId: palletId,
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId,
+      Status: { [Op.notIn]: ['Completed', 'Cancelled'] }
+    },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      },
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+      }
+    ]
+  });
+
+  if (!request) {
+    throw new Error('No active request found for this pallet');
+  }
+
+  // Step 9: Store request ID before deletion for notification
+  const requestId = request.Id;
+
+  // Step 10: Update request status to Completed
+  const istTime = getISTTime();
+  await request.update({
+    Status: 'Completed',
+    UpdatedAt: istTime
+  });
+
+  // Step 11: Release the pallet: set UserId to 0, CarId to null, Status to 'Released'
+  await pallet.update({
+    UserId: 0,
+    CarId: null,
+    Status: 'Released',
+    UpdatedAt: istTime
+  });
+
+  // Step 11.1: Update parking system status to 'PalletMovingToParking'
+  await ParkingSystem.update(
+    {
+      Status: 'PalletMovingToParking',
+      UpdatedAt: istTime
+    },
+    {
+      where: {
+        Id: parkingSystem.Id
+      }
+    }
+  );
+
+  // Step 12: Insert into RequestQueue as history
+  await RequestQueue.create({
+    UserId: request.UserId,
+    PalletAllotmentId: request.PalletAllotmentId,
+    ProjectId: request.ProjectId,
+    ParkingSystemId: request.ParkingSystemId,
+    CarId: request.CarId,
+    OperatorId: operator.Id,
+    Status: 'Completed',
+    EstimatedTime: request.EstimatedTime,
+    CreatedAt: request.CreatedAt,
+    UpdatedAt: istTime
+  });
+
+  // Step 13: Delete original request
+  await request.destroy();
+
+  // Step 14: Reload pallet to get updated information
+  await pallet.reload({
+    include: [
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      },
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      }
+    ]
+  });
+
+  // Step 15: Send notification to customer
+  if (request.user) {
+    const palletInfo = pallet.UserGivenPalletNumber || `Level ${pallet.Level || pallet.LevelBelowGround}, Column ${pallet.Column}`;
+    const carInfo = request.car ? `${request.car.CarCompany} ${request.car.CarModel} (${request.car.CarNumber})` : 'your car';
+    
+    await notificationService.sendNotificationToUser(
+      request.UserId,
+      'Car Released',
+      `Your car ${carInfo} has been released from pallet ${palletInfo}`,
+      {
+        type: 'car_released',
+        palletId: palletId.toString(),
+        requestId: requestId.toString()
+      }
+    );
+  }
+
+  return {
+    pallet: {
+      id: pallet.Id,
+      userId: pallet.UserId,
+      projectId: pallet.ProjectId,
+      parkingSystemId: pallet.ParkingSystemId,
+      level: pallet.Level,
+      levelBelowGround: pallet.LevelBelowGround,
+      column: pallet.Column,
+      userGivenPalletNumber: pallet.UserGivenPalletNumber,
+      carId: pallet.CarId,
+      status: pallet.Status,
+      createdAt: pallet.CreatedAt,
+      updatedAt: pallet.UpdatedAt
+    },
+    parkingSystem: pallet.parkingSystem ? {
+      id: pallet.parkingSystem.Id,
+      wingName: pallet.parkingSystem.WingName,
+      type: pallet.parkingSystem.Type,
+      level: pallet.parkingSystem.Level,
+      column: pallet.parkingSystem.Column
+    } : null,
+    project: pallet.project ? {
+      id: pallet.project.Id,
+      projectName: pallet.project.ProjectName,
+      societyName: pallet.project.SocietyName
+    } : null,
+    timeToCall: timeToCall,
+    timeToCallFormatted: formatTime(timeToCall),
+    message: 'Car released successfully. Request completed, logged to history, and removed from active requests. Pallet has been released.'
+  };
+};
+
 module.exports = {
   createOperator,
   getOperatorProfile,
@@ -1143,6 +1868,11 @@ module.exports = {
   updateRequestStatus,
   updateOperatorPalletPower,
   getOperatorCustomersWithCars,
-  approveCustomer
+  approveCustomer,
+  callEmptyPallet,
+  updateParkingSystemStatus,
+  releaseParkedCar,
+  callSpecificPallet
 };
+
 

@@ -223,7 +223,8 @@ const updateParkingRequestStatus = async (operatorUserId, parkingRequestId, newS
 
   const validTransitions = {
     Pending: ['Accepted', 'Completed', 'Cancelled'],
-    Accepted: ['Completed', 'Cancelled'],
+    Accepted: ['Queued', 'Completed', 'Cancelled'],
+    Queued: ['Completed', 'Cancelled'],
     Completed: [],
     Cancelled: []
   };

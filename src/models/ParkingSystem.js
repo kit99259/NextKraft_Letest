@@ -53,6 +53,10 @@ const ParkingSystem = sequelize.define('ParkingSystem', {
     type: DataTypes.INTEGER,
     defaultValue: 0
   },
+  Status: {
+    type: DataTypes.ENUM('Idle', 'PalletMovingToGround', 'PalletMovingToParking', 'AtGround'),
+    defaultValue: 'Idle'
+  },
   CreatedAt: {
     type: DataTypes.DATE,
     allowNull: false,
