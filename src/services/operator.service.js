@@ -2455,13 +2455,7 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
     UpdatedAt: istTime
   });
 
-  // Step 10: Update request status to 'Accepted'
-  await request.update({
-    Status: 'Accepted',
-    UpdatedAt: istTime
-  });
-
-  // Step 11: Update parking system status to 'PalletMovingToGround'
+  // Step 10: Update parking system status to 'PalletMovingToGround'
   await ParkingSystem.update(
     {
       Status: 'PalletMovingToGround',
@@ -2489,14 +2483,14 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
 
   const timeToCallFormatted = formatTime(timeToCall);
 
-  // Step 13: Send notification to customer with estimated time
+  // Step 13: Send notification to customer
   if (customer && customer.user) {
     await notificationService.sendNotificationToUser(
       car.UserId,
-      'Request Accepted',
-      `Your car release request has been accepted. Pallet is being moved to ground level. Estimated time: ${timeToCallFormatted}.`,
+      'Car Release Request Created',
+      `Your car release request has been created and is pending. Estimated time: ${timeToCallFormatted}.`,
       {
-        type: 'request_accepted',
+        type: 'car_release_request',
         requestId: request.Id.toString(),
         palletId: parkedPallet.Id.toString(),
         estimatedTime: timeToCall,

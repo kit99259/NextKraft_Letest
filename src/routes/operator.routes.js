@@ -1678,14 +1678,13 @@ router.post('/call-pallet-create-request', authorize('operator'), validateCallPa
  *   post:
  *     summary: Call pallet by car number last 6 digits (Operator only)
  *     description: |
- *       Finds a car by the last 6 digits of its car number (unique), checks if it's parked,
- *       creates a release request, and calls the pallet (same as callSpecificPallet).
+ *       Finds a car by the last 6 characters of its car number (unique), checks if it's parked,
+ *       and creates a release request.
  *       This will:
- *       - Search for car with matching last 6 digits (unique identifier)
+ *       - Search for car with matching last 6 characters (unique identifier)
  *       - Check if the car is parked in operator's parking system
  *       - Check if a request already exists (if yes, throws error)
  *       - Create a new release request with status 'Pending'
- *       - Immediately update request status to 'Accepted'
  *       - Calculate time to move pallet to ground level
  *       - Update parking system status to 'PalletMovingToGround'
  *       - Send notification to customer with estimated time
@@ -1705,8 +1704,7 @@ router.post('/call-pallet-create-request', authorize('operator'), validateCallPa
  *                 type: string
  *                 minLength: 6
  *                 maxLength: 6
- *                 pattern: '^\d+$'
- *                 description: Last 6 digits of the car number (unique identifier)
+ *                 description: Last 6 characters of the car number (unique identifier)
  *                 example: "123456"
  *     responses:
  *       200:
@@ -1754,7 +1752,7 @@ router.post('/call-pallet-create-request', authorize('operator'), validateCallPa
  *                           type: integer
  *                         status:
  *                           type: string
- *                           enum: [Accepted]
+ *                           enum: [Pending]
  *                         estimatedTime:
  *                           type: integer
  *                         createdAt:
@@ -1807,7 +1805,7 @@ router.post('/call-pallet-create-request', authorize('operator'), validateCallPa
  *       403:
  *         description: Forbidden - Operator access required
  *       404:
- *         description: Operator profile not found, no car found with last 6 digits, or car not parked in operator's parking system
+ *         description: Operator profile not found, no car found with last 6 characters, or car not parked in operator's parking system
  */
 router.post('/call-pallet-by-car-number', authorize('operator'), validateCallPalletByCarNumber, operatorController.callPalletByCarNumber);
 
