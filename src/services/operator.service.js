@@ -1367,8 +1367,13 @@ const getOperatorCustomersWithCars = async (operatorUserId) => {
   };
 };
 
-// Approve Customer (Operator)
-const approveCustomer = async (operatorUserId, customerId) => {
+// Update Customer Status (Operator) - Approve or Reject
+const updateCustomerStatus = async (operatorUserId, customerId, status) => {
+  // Validate status
+  if (status !== 'Approved' && status !== 'Rejected') {
+    throw new Error('Status must be either "Approved" or "Rejected"');
+  }
+
   // Validate operator exists
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId }
@@ -1391,11 +1396,14 @@ const approveCustomer = async (operatorUserId, customerId) => {
 
   const istTime = getISTTime();
   await customer.update({
-    Status: 'Approved',
+    Status: status,
     ApprovedBy: operatorUserId,
     ApprovedAt: istTime,
     UpdatedAt: istTime
   });
+
+  // Reload customer to get updated values
+  await customer.reload();
 
   return {
     id: customer.Id,
@@ -2545,7 +2553,7 @@ module.exports = {
   updateRequestStatus,
   updateOperatorPalletPower,
   getOperatorCustomersWithCars,
-  approveCustomer,
+  updateCustomerStatus,
   callEmptyPallet,
   updateParkingSystemStatus,
   releaseParkedCar,
