@@ -333,7 +333,7 @@ const getCustomerPalletStatus = async (userId) => {
     const allRequests = await Request.findAll({
       where: {
         PalletAllotmentId: { [Op.in]: palletIds },
-        Status: { [Op.ne]: 'Completed' }
+        Status: { [Op.in]: [ 'Completed', 'Cancelled' ] }
       },
       include: [
         {
@@ -372,7 +372,7 @@ const getCustomerPalletStatus = async (userId) => {
   // Get all non-completed requests for these project/parking system combinations to calculate waiting numbers
   const allProjectParkingSystemRequests = projectParkingSystemKeys.length > 0 ? await Request.findAll({
     where: {
-      Status: { [Op.ne]: 'Completed' }
+      Status: { [Op.in]: [ 'Completed', 'Cancelled' ] }
     },
     attributes: ['Id', 'ProjectId', 'ParkingSystemId', 'CreatedAt'],
     order: [['CreatedAt', 'ASC']]
