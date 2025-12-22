@@ -755,7 +755,7 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
         palletId: palletId.toString(),
         customerId: customer.Id.toString(),
         carId: car ? car.Id.toString() : null,
-        parkingRequestId: parkingRequestId.toString()
+        parkingRequestId: parkingRequestId !== null ? parkingRequestId.toString() : null
       }
     );
   }
