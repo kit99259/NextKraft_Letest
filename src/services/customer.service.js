@@ -484,11 +484,13 @@ const getCustomerPalletStatus = async (userId) => {
     };
   });
 
-  // Get all pending parking requests for this customer
+  // Get all parking requests for this customer that are not Completed or Cancelled
   const pendingParkingRequests = await ParkingRequest.findAll({
     where: {
       UserId: userId,
-      Status: 'Pending'
+      Status: {
+        [Op.notIn]: ['Completed', 'Cancelled']
+      }
     },
     include: [
       {
