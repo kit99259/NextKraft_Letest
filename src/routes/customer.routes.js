@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth.middleware');
 const customerController = require('../controllers/customer.controller');
+const parkingSystemController = require('../controllers/parkingSystem.controller');
 const parkingRequestController = require('../controllers/parkingRequest.controller');
 const { validateCreateCustomer } = require('../validators/customer.validator');
 const { validateCreateCar } = require('../validators/car.validator');
@@ -1008,6 +1009,41 @@ router.get('/requests', authenticate, customerController.getCustomerRequests);
  *         description: Unauthorized
  */
 router.post('/parking-request', authenticate, parkingRequestController.createParkingRequest);
+
+/**
+ * @swagger
+ * /api/customer/parking-system-status:
+ *   get:
+ *     summary: Get parking system status (Customer only)
+ *     description: Returns the status of the parking system assigned to the authenticated customer.
+ *     tags: [Customer]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Parking system status retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       enum: [Idle, PalletMovingToGround, PalletMovingToParking, AtGround]
+ *                       description: Current status of the parking system
+ *       401:
+ *         description: Unauthorized - Authentication required
+ *       404:
+ *         description: Customer profile not found or not assigned to parking system
+ */
+router.get('/parking-system-status', authenticate, parkingSystemController.getParkingSystemStatus);
 
 module.exports = router;
 

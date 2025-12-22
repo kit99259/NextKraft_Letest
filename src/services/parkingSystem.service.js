@@ -1,5 +1,5 @@
 const { sequelize } = require('../config/database');
-const { Project, ParkingSystem, PalletAllotment, Car, User } = require('../models/associations');
+const { Project, ParkingSystem, PalletAllotment, Car, User, Operator, Customer } = require('../models/associations');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -535,11 +535,62 @@ const getProjectDetailsWithParkingSystemAndPallets = async (projectId) => {
   };
 };
 
+// Get Parking System Status Service (Operator and Customer)
+const getParkingSystemStatus = async (userId, userRole) => {
+  let parkingSystemId = null;
+
+  // Step 1: Get ParkingSystemId based on user role
+  if (userRole === 'operator') {
+    const operator = await Operator.findOne({
+      where: { UserId: userId }
+    });
+
+    if (!operator) {
+      throw new Error('Operator profile not found');
+    }
+
+    if (!operator.ParkingSystemId) {
+      throw new Error('Operator is not assigned to any parking system');
+    }
+
+    parkingSystemId = operator.ParkingSystemId;
+  } else if (userRole === 'customer') {
+    const customer = await Customer.findOne({
+      where: { UserId: userId }
+    });
+
+    if (!customer) {
+      throw new Error('Customer profile not found');
+    }
+
+    if (!customer.ParkingSystemId) {
+      throw new Error('Customer is not assigned to any parking system');
+    }
+
+    parkingSystemId = customer.ParkingSystemId;
+  } else {
+    throw new Error('Invalid user role. Only operator and customer roles are allowed');
+  }
+
+  // Step 2: Get ParkingSystem by ID
+  const parkingSystem = await ParkingSystem.findByPk(parkingSystemId);
+
+  if (!parkingSystem) {
+    throw new Error('Parking system not found');
+  }
+
+  // Step 3: Return status
+  return {
+    status: parkingSystem.Status
+  };
+};
+
 module.exports = {
   createParkingSystem,
   getProjectListWithParkingSystems,
   getPalletDetails,
   generatePallets,
-  getProjectDetailsWithParkingSystemAndPallets
+  getProjectDetailsWithParkingSystemAndPallets,
+  getParkingSystemStatus
 };
 

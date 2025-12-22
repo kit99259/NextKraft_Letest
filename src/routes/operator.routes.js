@@ -2014,5 +2014,42 @@ router.put('/parking-system/status', authorize('operator'), validateUpdateParkin
  */
 router.post('/release-parked-car', authorize('operator'), validateReleaseParkedCar, operatorController.releaseParkedCar);
 
+/**
+ * @swagger
+ * /api/operator/parking-system-status:
+ *   get:
+ *     summary: Get parking system status (Operator only)
+ *     description: Returns the status of the parking system assigned to the authenticated operator.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Parking system status retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       enum: [Idle, PalletMovingToGround, PalletMovingToParking, AtGround]
+ *                       description: Current status of the parking system
+ *       401:
+ *         description: Unauthorized - Authentication required
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator profile not found or not assigned to parking system
+ */
+router.get('/parking-system-status', authorize('operator'), parkingSystemController.getParkingSystemStatus);
+
 module.exports = router;
 
