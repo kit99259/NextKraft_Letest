@@ -356,7 +356,7 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
     }
 
     // Validate parking request status (should be Pending or Accepted)
-    if (!['Pending', 'Accepted'].includes(parkingRequest.Status)) {
+    if (!['Pending', 'Accepted', 'Queued'].includes(parkingRequest.Status)) {
       throw new Error(`Cannot assign pallet to a parking request with status: ${parkingRequest.Status}`);
     }
 
