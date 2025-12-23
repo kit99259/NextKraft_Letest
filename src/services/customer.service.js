@@ -613,14 +613,41 @@ const requestCarRelease = async (userId, palletId) => {
     throw new Error('No operator assigned to this parking system. Please contact administrator');
   }
 
-  // Step 4: Calculate estimated time to bring down the car
-  // Estimated time = (Level * TimeForEachLevel) + TimeForHorizontalMove + BufferTime
-  // Level is the pallet's level, TimeForEachLevel is from parking system
-  const estimatedTime = (pallet.Level * pallet.parkingSystem.TimeForEachLevel) + pallet.parkingSystem.TimeForHorizontalMove + (pallet.parkingSystem.BufferTime || 0);
+  // Step 4: Calculate estimated time to bring down the car (same logic as callSpecificPallet)
+  let estimatedTime = 0;
+
+  if (pallet.parkingSystem.Type === 'Tower') {
+    // For Tower: (Level * TimePerLevel) + BufferTime
+    estimatedTime = (pallet.Level * pallet.parkingSystem.TimeForEachLevel) + (pallet.parkingSystem.BufferTime || 0);
+  } else if (pallet.parkingSystem.Type === 'Puzzle') {
+    // For Puzzle: Calculate based on pallet location
+    if (pallet.Level !== null && pallet.Level !== undefined && pallet.LevelBelowGround === null) {
+      // Pallet has Level and Column (above ground)
+      // Time = (Level * TimePerLevel) + HorizontalMoveTime + BufferTime
+      // HorizontalMoveTime is NOT applicable for Level 1
+      estimatedTime = (pallet.Level * pallet.parkingSystem.TimeForEachLevel) + 
+                     (pallet.Level > 1 ? pallet.parkingSystem.TimeForHorizontalMove : 0) + 
+                     (pallet.parkingSystem.BufferTime || 0);
+    } else if (pallet.LevelBelowGround !== null && pallet.LevelBelowGround !== undefined) {
+      // Pallet has LevelBelowGround and Column (below ground)
+      if (pallet.LevelBelowGround === 1) {
+        // LevelBelowGround 1: Only (LevelBelowGround * TimePerLevel) + BufferTime
+        estimatedTime = (pallet.LevelBelowGround * pallet.parkingSystem.TimeForEachLevel) + (pallet.parkingSystem.BufferTime || 0);
+      } else {
+        // LevelBelowGround > 1: (LevelBelowGround * TimePerLevel) + ((LevelBelowGround * TimePerLevel) + HorizontalMoveTime + BufferTime)
+        estimatedTime = (pallet.LevelBelowGround * pallet.parkingSystem.TimeForEachLevel) + 
+                       ((pallet.LevelBelowGround * pallet.parkingSystem.TimeForEachLevel) + 
+                        pallet.parkingSystem.TimeForHorizontalMove + 
+                        (pallet.parkingSystem.BufferTime || 0));
+      }
+    } else {
+      throw new Error('Pallet location information is invalid');
+    }
+  } else {
+    throw new Error('Invalid parking system type');
+  }
 
   // Step 5: Create request entry
-  const istTime = getISTTime();
-
   const request = await Request.create({
     UserId: userId,
     PalletAllotmentId: palletId,
@@ -628,9 +655,7 @@ const requestCarRelease = async (userId, palletId) => {
     ParkingSystemId: pallet.ParkingSystemId,
     CarId: pallet.CarId,
     Status: 'Pending',
-    EstimatedTime: estimatedTime,
-    CreatedAt: istTime,
-    UpdatedAt: istTime
+    EstimatedTime: estimatedTime
   });
 
   // Step 5.1: Calculate total estimated time including waiting requests
@@ -640,16 +665,12 @@ const requestCarRelease = async (userId, palletId) => {
       ProjectId: pallet.ProjectId,
       ParkingSystemId: pallet.ParkingSystemId,
       Status: { [Op.ne]: 'Completed' },
-      CreatedAt: { [Op.lt]: istTime } // Created before this request
+      CreatedAt: { [Op.lt]: request.CreatedAt } // Created before this request
     },
     attributes: ['EstimatedTime']
   });
-
-  // Sum up estimated times from waiting requests
-  const waitingTime = waitingRequests.reduce((sum, req) => sum + (req.EstimatedTime || 0), 0);
   
-  // Total estimated time = waiting time + current request estimated time
-  const totalEstimatedTime = waitingTime + estimatedTime;
+  const totalEstimatedTime = estimatedTime;
 
   // Step 6: Reload request with associations
   await request.reload({
@@ -737,8 +758,6 @@ const requestCarRelease = async (userId, palletId) => {
         carNumber: request.car.CarNumber
       } : null,
       status: request.Status,
-      estimatedTime: request.EstimatedTime,
-      estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
       totalEstimatedTime: totalEstimatedTime,
       totalEstimatedTimeFormatted: `${Math.floor(totalEstimatedTime / 60)} minutes ${totalEstimatedTime % 60} seconds`,
       waitingNumber: waitingRequests.length,
