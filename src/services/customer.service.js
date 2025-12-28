@@ -222,16 +222,289 @@ const getCarList = async (userId) => {
     order: [['CreatedAt', 'DESC']]
   });
 
-  return cars.map(car => ({
-    id: car.Id,
-    userId: car.UserId,
-    carType: car.CarType,
-    carModel: car.CarModel,
-    carCompany: car.CarCompany,
-    carNumber: car.CarNumber,
-    createdAt: car.CreatedAt,
-    updatedAt: car.UpdatedAt
-  }));
+  if (cars.length === 0) {
+    return [];
+  }
+
+  // Get all car IDs
+  const carIds = cars.map(car => car.Id);
+
+  // Fetch latest requests for each car (not Cancelled or Completed)
+  const allRequests = await Request.findAll({
+    where: {
+      CarId: { [Op.in]: carIds },
+      Status: { [Op.notIn]: ['Cancelled', 'Completed'] }
+    },
+    include: [
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column', 'TimeForEachLevel', 'TimeForHorizontalMove', 'BufferTime']
+      },
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+      },
+      {
+        model: PalletAllotment,
+        as: 'palletAllotment',
+        attributes: ['Id', 'Level', 'LevelBelowGround', 'Column', 'UserGivenPalletNumber', 'Status']
+      }
+    ],
+    order: [['CreatedAt', 'DESC']]
+  });
+
+  // Group requests by CarId and take the latest one for each car
+  const requestsMap = new Map();
+  allRequests.forEach(request => {
+    if (!requestsMap.has(request.CarId)) {
+      requestsMap.set(request.CarId, request);
+    }
+  });
+
+  // Fetch latest parking requests for each car (not Cancelled or Completed)
+  const allParkingRequests = await ParkingRequest.findAll({
+    where: {
+      CarId: { [Op.in]: carIds },
+      Status: { [Op.notIn]: ['Cancelled', 'Completed'] }
+    },
+    include: [
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+      },
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+      }
+    ],
+    order: [['CreatedAt', 'DESC']]
+  });
+
+  // Group parking requests by CarId and take the latest one for each car
+  const parkingRequestsMap = new Map();
+  allParkingRequests.forEach(parkingRequest => {
+    if (!parkingRequestsMap.has(parkingRequest.CarId)) {
+      parkingRequestsMap.set(parkingRequest.CarId, parkingRequest);
+    }
+  });
+
+  // Fetch assigned pallets for each car
+  const assignedPallets = await PalletAllotment.findAll({
+    where: {
+      CarId: { [Op.in]: carIds },
+      Status: 'Assigned'
+    },
+    include: [
+      {
+        model: Project,
+        as: 'project',
+        attributes: ['Id', 'ProjectName', 'SocietyName']
+      },
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'WingName', 'Type', 'Level', 'Column', 'TotalNumberOfPallet']
+      },
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+      }
+    ]
+  });
+
+  // Group pallets by CarId (should be only one per car, but we'll take the first one)
+  const palletsMap = new Map();
+  assignedPallets.forEach(pallet => {
+    if (!palletsMap.has(pallet.CarId)) {
+      palletsMap.set(pallet.CarId, pallet);
+    }
+  });
+
+  // Helper function to calculate estimated time (same logic as requestCarRelease)
+  const calculateEstimatedTime = (palletAllotment, parkingSystem) => {
+    if (!palletAllotment || !parkingSystem) {
+      return null;
+    }
+
+    let estimatedTime = 0;
+
+    if (parkingSystem.Type === 'Tower') {
+      // For Tower: (Level * TimePerLevel) + BufferTime
+      estimatedTime = (palletAllotment.Level * parkingSystem.TimeForEachLevel) + (parkingSystem.BufferTime || 0);
+    } else if (parkingSystem.Type === 'Puzzle') {
+      // For Puzzle: Calculate based on pallet location
+      if (palletAllotment.Level !== null && palletAllotment.Level !== undefined && palletAllotment.LevelBelowGround === null) {
+        // Pallet has Level and Column (above ground)
+        // Time = (Level * TimePerLevel) + HorizontalMoveTime + BufferTime
+        // HorizontalMoveTime is NOT applicable for Level 1
+        estimatedTime = (palletAllotment.Level * parkingSystem.TimeForEachLevel) + 
+                       (palletAllotment.Level > 1 ? parkingSystem.TimeForHorizontalMove : 0) + 
+                       (parkingSystem.BufferTime || 0);
+      } else if (palletAllotment.LevelBelowGround !== null && palletAllotment.LevelBelowGround !== undefined) {
+        // Pallet has LevelBelowGround and Column (below ground)
+        if (palletAllotment.LevelBelowGround === 1) {
+          // LevelBelowGround 1: Only (LevelBelowGround * TimePerLevel) + BufferTime
+          estimatedTime = (palletAllotment.LevelBelowGround * parkingSystem.TimeForEachLevel) + (parkingSystem.BufferTime || 0);
+        } else {
+          // LevelBelowGround > 1: (LevelBelowGround * TimePerLevel) + ((LevelBelowGround * TimePerLevel) + HorizontalMoveTime + BufferTime)
+          estimatedTime = (palletAllotment.LevelBelowGround * parkingSystem.TimeForEachLevel) + 
+                         ((palletAllotment.LevelBelowGround * parkingSystem.TimeForEachLevel) + 
+                          parkingSystem.TimeForHorizontalMove + 
+                          (parkingSystem.BufferTime || 0));
+        }
+      } else {
+        // Invalid pallet location information
+        return null;
+      }
+    } else {
+      // Invalid parking system type
+      return null;
+    }
+
+    return estimatedTime;
+  };
+
+  // Map cars with their associated data
+  return cars.map(car => {
+    const request = requestsMap.get(car.Id) || null;
+    const parkingRequest = parkingRequestsMap.get(car.Id) || null;
+    const pallet = palletsMap.get(car.Id) || null;
+
+    // Calculate estimated time for request if it exists
+    let calculatedEstimatedTime = null;
+    if (request && request.palletAllotment && request.parkingSystem) {
+      calculatedEstimatedTime = calculateEstimatedTime(request.palletAllotment, request.parkingSystem);
+    }
+
+    return {
+      id: car.Id,
+      userId: car.UserId,
+      carType: car.CarType,
+      carModel: car.CarModel,
+      carCompany: car.CarCompany,
+      carNumber: car.CarNumber,
+      request: request ? {
+        id: request.Id,
+        userId: request.UserId,
+        palletAllotmentId: request.PalletAllotmentId,
+        projectId: request.ProjectId,
+        parkingSystemId: request.ParkingSystemId,
+        carId: request.CarId,
+        project: request.project ? {
+          id: request.project.Id,
+          projectName: request.project.ProjectName,
+          societyName: request.project.SocietyName
+        } : null,
+        parkingSystem: request.parkingSystem ? {
+          id: request.parkingSystem.Id,
+          wingName: request.parkingSystem.WingName,
+          type: request.parkingSystem.Type,
+          level: request.parkingSystem.Level,
+          column: request.parkingSystem.Column
+        } : null,
+        car: request.car ? {
+          id: request.car.Id,
+          carType: request.car.CarType,
+          carModel: request.car.CarModel,
+          carCompany: request.car.CarCompany,
+          carNumber: request.car.CarNumber
+        } : null,
+        palletAllotment: request.palletAllotment ? {
+          id: request.palletAllotment.Id,
+          level: request.palletAllotment.Level,
+          levelBelowGround: request.palletAllotment.LevelBelowGround,
+          column: request.palletAllotment.Column,
+          userGivenPalletNumber: request.palletAllotment.UserGivenPalletNumber,
+          status: request.palletAllotment.Status
+        } : null,
+        status: request.Status,
+        estimatedTime: calculatedEstimatedTime !== null ? calculatedEstimatedTime : request.EstimatedTime,
+        estimatedTimeFormatted: calculatedEstimatedTime !== null ? `${Math.floor(calculatedEstimatedTime / 60)} minutes ${calculatedEstimatedTime % 60} seconds` : (request.EstimatedTime ? `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds` : null),
+        createdAt: request.CreatedAt,
+        updatedAt: request.UpdatedAt
+      } : null,
+      parkingRequest: parkingRequest ? {
+        id: parkingRequest.Id,
+        userId: parkingRequest.UserId,
+        projectId: parkingRequest.ProjectId,
+        parkingSystemId: parkingRequest.ParkingSystemId,
+        carId: parkingRequest.CarId,
+        status: parkingRequest.Status,
+        project: parkingRequest.project ? {
+          id: parkingRequest.project.Id,
+          projectName: parkingRequest.project.ProjectName,
+          societyName: parkingRequest.project.SocietyName
+        } : null,
+        parkingSystem: parkingRequest.parkingSystem ? {
+          id: parkingRequest.parkingSystem.Id,
+          wingName: parkingRequest.parkingSystem.WingName,
+          type: parkingRequest.parkingSystem.Type,
+          level: parkingRequest.parkingSystem.Level,
+          column: parkingRequest.parkingSystem.Column
+        } : null,
+        car: parkingRequest.car ? {
+          id: parkingRequest.car.Id,
+          carType: parkingRequest.car.CarType,
+          carModel: parkingRequest.car.CarModel,
+          carCompany: parkingRequest.car.CarCompany,
+          carNumber: parkingRequest.car.CarNumber
+        } : null,
+        createdAt: parkingRequest.CreatedAt,
+        updatedAt: parkingRequest.UpdatedAt
+      } : null,
+      pallet: pallet ? {
+        id: pallet.Id,
+        userId: pallet.UserId,
+        projectId: pallet.ProjectId,
+        parkingSystemId: pallet.ParkingSystemId,
+        level: pallet.Level,
+        levelBelowGround: pallet.LevelBelowGround,
+        column: pallet.Column,
+        userGivenPalletNumber: pallet.UserGivenPalletNumber,
+        carId: pallet.CarId,
+        status: pallet.Status,
+        project: pallet.project ? {
+          id: pallet.project.Id,
+          projectName: pallet.project.ProjectName,
+          societyName: pallet.project.SocietyName
+        } : null,
+        parkingSystem: pallet.parkingSystem ? {
+          id: pallet.parkingSystem.Id,
+          wingName: pallet.parkingSystem.WingName,
+          type: pallet.parkingSystem.Type,
+          level: pallet.parkingSystem.Level,
+          column: pallet.parkingSystem.Column,
+          totalNumberOfPallet: pallet.parkingSystem.TotalNumberOfPallet
+        } : null,
+        car: pallet.car ? {
+          id: pallet.car.Id,
+          carType: pallet.car.CarType,
+          carModel: pallet.car.CarModel,
+          carCompany: pallet.car.CarCompany,
+          carNumber: pallet.car.CarNumber
+        } : null,
+        createdAt: pallet.CreatedAt,
+        updatedAt: pallet.UpdatedAt
+      } : null,
+      createdAt: car.CreatedAt,
+      updatedAt: car.UpdatedAt
+    };
+  });
 };
 
 // Get Available Car List Service (cars that are not parked/assigned)
@@ -681,6 +954,11 @@ const requestCarRelease = async (userId, palletId) => {
         attributes: ['Id', 'ProjectName', 'SocietyName']
       },
       {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      },
+      {
         model: ParkingSystem,
         as: 'parkingSystem',
         attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
@@ -693,7 +971,7 @@ const requestCarRelease = async (userId, palletId) => {
       {
         model: PalletAllotment,
         as: 'palletAllotment',
-        attributes: ['Id', 'Level', 'Column', 'UserGivenPalletNumber'],
+        attributes: ['Id', 'Level', 'Column', 'UserGivenPalletNumber', 'Status'],
         include: [
           {
             model: ParkingSystem,
@@ -728,6 +1006,75 @@ const requestCarRelease = async (userId, palletId) => {
         palletId: palletId.toString()
       }
     );
+
+    // Emit WebSocket event to operator
+    await websocketService.emitToUser(operator.user.Id, 'car_release_request', {
+      id: request.Id,
+      userId: request.UserId,
+      customer: request.user ? {
+        id: request.user.Id,
+        username: request.user.Username,
+        role: request.user.Role
+      } : null,
+      palletAllotmentId: request.PalletAllotmentId,
+      pallet: request.palletAllotment ? {
+        id: request.palletAllotment.Id,
+        level: request.palletAllotment.Level,
+        column: request.palletAllotment.Column,
+        userGivenPalletNumber: request.palletAllotment.UserGivenPalletNumber,
+        status: request.palletAllotment.Status,
+        car: request.car ? {
+          id: request.car.Id,
+          carType: request.car.CarType,
+          carModel: reque.car.CarModel,
+          carCompany: request.car.CarCompany,
+          carNumber: request.car.CarNumber,
+          user: request.user ? {
+            id: request.user.Id,
+            username: request.user.Username
+          } : null
+        } : null,
+        parkingSystem: request.parkingSystem ? {
+          id: request.parkingSystem.Id,
+          wingName: request.parkingSystem.WingName,
+          type: request.parkingSystem.Type,
+          level: request.parkingSystem.Level,
+          column: request.parkingSystem.Column
+        } : null,
+        project: request.project ? {
+          id: request.project.Id,
+          projectName: request.project.ProjectName,
+          societyName: request.project.SocietyName
+        } : null
+      } : null,
+      projectId: request.ProjectId,
+      parkingSystemId: request.ParkingSystemId,
+      carId: request.CarId,
+      project: request.project ? {
+        id: request.project.Id,
+        projectName: request.project.ProjectName,
+        societyName: request.project.SocietyName
+      } : null,
+      parkingSystem: request.parkingSystem ? {
+        id: request.parkingSystem.Id,
+        wingName: request.parkingSystem.WingName,
+        type: request.parkingSystem.Type,
+        level: request.parkingSystem.Level,
+        column: request.parkingSystem.Column
+      } : null,
+      car: request.car ? {
+        id: request.car.Id,
+        carType: request.car.CarType,
+        carModel: request.car.CarModel,
+        carCompany: request.car.CarCompany,
+        carNumber: request.car.CarNumber
+      } : null,
+      status: request.Status,
+      estimatedTime: request.EstimatedTime,
+      estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
+      createdAt: request.CreatedAt,
+      updatedAt: request.UpdatedAt
+    });
   }
 
   return {
