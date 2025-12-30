@@ -1027,7 +1027,7 @@ const requestCarRelease = async (userId, palletId) => {
         car: request.car ? {
           id: request.car.Id,
           carType: request.car.CarType,
-          carModel: reque.car.CarModel,
+          carModel: request.car.CarModel,
           carCompany: request.car.CarCompany,
           carNumber: request.car.CarNumber,
           user: request.user ? {

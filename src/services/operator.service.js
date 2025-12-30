@@ -720,6 +720,9 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
     }
   };
 
+  // Format the time to parking
+  const timeToParkingFormatted = formatTime(timeToParking);
+
   // Step 14: Check if car is already assigned to another pallet
   const existingPalletAssignment = await PalletAllotment.findOne({
     where: {
