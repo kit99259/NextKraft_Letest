@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const notificationService = require('./notification.service');
+const websocketService = require('./websocket.service');
 const { User, Customer, Operator, Car, ParkingRequest, Project, ParkingSystem, PalletAllotment } = require('../models/associations');
 
 const getISTTime = () => {
@@ -130,7 +131,6 @@ const createParkingRequest = async (userId, carId) => {
     );
 
     // Emit WebSocket event for real-time update to operator
-    const websocketService = require('./websocket.service');
     websocketService.emitToUser(operator.user.Id, 'new_parking_request', {
       id: parkingRequest.Id,
       userId: parkingRequest.userId,
@@ -306,7 +306,6 @@ const updateParkingRequestStatus = async (operatorUserId, parkingRequestId, newS
   );
 
   // Emit WebSocket event for real-time update
-  const websocketService = require('./websocket.service');
   websocketService.emitToUser(parkingRequest.UserId, 'parking_request_status_changed', {
     parkingRequestId: parkingRequest.Id,
     status: newStatus,

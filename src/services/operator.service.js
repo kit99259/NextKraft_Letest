@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
 const notificationService = require('./notification.service');
 const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request, RequestQueue, ParkingRequest } = require('../models/associations');
+const websocketService = require('./websocket.service');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -22,7 +23,6 @@ const emitParkingSystemStatusToProjectCustomers = async (projectId, parkingSyste
   }
 
   try {
-    const websocketService = require('./websocket.service');
     
     // Get all customers for this project
     const projectCustomers = await Customer.findAll({
@@ -819,7 +819,7 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
     );
 
     // Emit WebSocket event to all customer
-    const websocketService = require('./websocket.service');
+    
     await websocketService.emitToUser(customer.UserId, 'parking_request_accepted', {
       palletId: palletId.toString(),
       customerId: customer.Id.toString(),
@@ -900,7 +900,7 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
         );
 
         // Emit WebSocket event to all customer
-        const websocketService = require('./websocket.service');
+        
         await websocketService.emitToUser(delayedCustomer.UserId, 'pallet_assigned', {
           palletId: delayedPalletId.toString(),
           customerId: delayedCustomer.Id.toString(),
@@ -1288,7 +1288,7 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
     );
 
     // Emit WebSocket event for real-time update
-    const websocketService = require('./websocket.service');
+    
     websocketService.emitToUser(request.user.Id, 'request_status_changed', {
       requestId: request.Id,
       carId: request.CarId,

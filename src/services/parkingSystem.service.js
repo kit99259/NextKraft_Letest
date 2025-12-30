@@ -1,5 +1,6 @@
 const { sequelize } = require('../config/database');
 const { Project, ParkingSystem, PalletAllotment, Car, User, Operator, Customer } = require('../models/associations');
+const websocketService = require('./websocket.service');
 
 // Helper function to get IST time
 const getISTTime = () => {

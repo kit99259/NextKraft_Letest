@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const { User, Customer, ParkingSystem, Project, Car, PalletAllotment, Request, Operator, ParkingRequest } = require('../models/associations');
+const websocketService = require('./websocket.service');
 
 // Helper function to get IST time
 const getISTTime = () => {
