@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const crypto = require('crypto');
 const notificationService = require('./notification.service');
 const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request, RequestQueue, ParkingRequest } = require('../models/associations');
 const websocketService = require('./websocket.service');
@@ -458,12 +459,40 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
 
     if (!car) {
       // Car doesn't exist - need to create user, customer, and car
-      const dummyUsername = 'erhtghgkdgdutng534653';
+      // Step: Find or create dummy user for this parking system
+      // Each parking system should have only one dummy user
       
-      // Check if user with this username exists
-      let user = await User.findOne({ where: { Username: dummyUsername } });
-      
-      if (!user) {
+      // First, check if there's already a dummy customer for this parking system
+      // (which means there's already a dummy user for this parking system)
+      let existingDummyCustomer = await Customer.findOne({
+        where: {
+          ParkingSystemId: operator.ParkingSystemId,
+          ProjectId: operator.ProjectId
+        },
+        include: [
+          {
+            model: User,
+            as: 'user',
+            where: {
+              Username: { [Op.like]: 'dummynextcraft%' }
+            },
+            attributes: ['Id', 'Username', 'Role']
+          }
+        ]
+      });
+
+      let user = null;
+
+      if (existingDummyCustomer && existingDummyCustomer.user) {
+        // Dummy user already exists for this parking system, use it
+        user = existingDummyCustomer.user;
+        customer = existingDummyCustomer;
+      } else {
+        // No dummy user exists for this parking system, create a new one
+        // Generate UUID for username
+        const uuid = crypto.randomUUID();
+        const dummyUsername = `dummynextcraft${uuid}`;
+        
         // Create user with dummy password
         const bcrypt = require('bcryptjs');
         const hashedPassword = await bcrypt.hash('dummy123', 10);
@@ -474,7 +503,7 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
           Role: 'customer'
         });
 
-        // Create dummy customer
+        // Create dummy customer for this parking system
         const istTime = getISTTime();
         customer = await Customer.create({
           UserId: user.Id,
@@ -503,54 +532,6 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
             }
           ]
         });
-      } else {
-        // User exists - find or create customer
-        customer = await Customer.findOne({
-          where: {
-            UserId: user.Id,
-            ProjectId: operator.ProjectId,
-            ParkingSystemId: operator.ParkingSystemId
-          },
-          include: [
-            {
-              model: User,
-              as: 'user',
-              attributes: ['Id', 'Username', 'Role']
-            }
-          ]
-        });
-
-        if (!customer) {
-          // Create customer for existing user
-          const istTime = getISTTime();
-          customer = await Customer.create({
-            UserId: user.Id,
-            FirstName: 'Dummy',
-            LastName: 'Customer',
-            Email: null,
-            MobileNumber: null,
-            ProjectId: operator.ProjectId,
-            ParkingSystemId: operator.ParkingSystemId,
-            FlatNumber: null,
-            Profession: null,
-            Status: 'Approved', // Auto-approve dummy customer
-            ApprovedBy: operatorUserId,
-            ApprovedAt: istTime,
-            CreatedAt: istTime,
-            UpdatedAt: istTime
-          });
-          
-          // Reload with user association
-          await customer.reload({
-            include: [
-              {
-                model: User,
-                as: 'user',
-                attributes: ['Id', 'Username', 'Role']
-              }
-            ]
-          });
-        }
       }
 
       userId = user.Id;
@@ -2563,29 +2544,26 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
 
   const parkingSystem = operator.parkingSystem;
 
-  // Step 4: Find car with matching last 6 digits (unique)
-  const car = await Car.findOne({
+  // Step 4: Find all cars with matching last 6 digits
+  const matchingCars = await Car.findAll({
     where: {
       CarNumber: { [Op.like]: `%${carNumberLast6}` }
     },
-    include: [
-      {
-        model: User,
-        as: 'user',
-        attributes: ['Id', 'Username', 'Role']
-      }
-    ]
+    attributes: ['Id', 'UserId', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
   });
 
-  if (!car) {
+  if (!matchingCars || matchingCars.length === 0) {
     throw new Error(`No car found with last 6 digits: ${carNumberLast6}`);
   }
 
-  // Step 5: Find if this car is parked (assigned to a pallet in operator's parking system)
+  // Step 5: Find which of these cars is parked in operator's parking system
+  // Get car IDs from matching cars
+  const matchingCarIds = matchingCars.map(c => c.Id);
+
+  // Find the pallet that matches: CarId in the list AND ParkingSystemId matches AND Status is 'Assigned'
   const parkedPallet = await PalletAllotment.findOne({
     where: {
-      CarId: car.Id,
-      UserId: car.UserId,
+      CarId: { [Op.in]: matchingCarIds },
       ParkingSystemId: operator.ParkingSystemId,
       Status: 'Assigned'
     },
@@ -2598,7 +2576,7 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
       {
         model: Car,
         as: 'car',
-        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber'],
+        attributes: ['Id', 'UserId', 'CarType', 'CarModel', 'CarCompany', 'CarNumber'],
         include: [
           {
             model: User,
@@ -2612,6 +2590,13 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
 
   if (!parkedPallet) {
     throw new Error(`Car with last 6 digits ${carNumberLast6} is not parked in your parking system`);
+  }
+
+  // Get the car from the parked pallet (this is the car that matches both criteria)
+  const car = parkedPallet.car;
+  
+  if (!car) {
+    throw new Error('Car information not found for parked pallet');
   }
 
   // Step 6: Check if there's already a request for this pallet

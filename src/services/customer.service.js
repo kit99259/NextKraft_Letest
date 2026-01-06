@@ -1288,15 +1288,19 @@ const getCustomerList = async (userId, userRole) => {
   }
   // If admin, no filtering needed (get all customers)
 
-  // Find the user to exclude by username
-  const userToExclude = await User.findOne({
-    where: { Username: 'erhtghgkdgdutng534653' }
+  // Find all dummy users to exclude (users with username starting with 'dummynextcraft')
+  const dummyUsers = await User.findAll({
+    where: { 
+      Username: { [Op.like]: 'dummynextcraft%' }
+    },
+    attributes: ['Id']
   });
 
-  // Exclude customer with the specified username
-  if (userToExclude) {
+  // Exclude all customers associated with dummy users
+  if (dummyUsers && dummyUsers.length > 0) {
+    const dummyUserIds = dummyUsers.map(user => user.Id);
     whereClause.UserId = {
-      [Op.ne]: userToExclude.Id
+      [Op.notIn]: dummyUserIds
     };
   }
 
