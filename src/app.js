@@ -1,4 +1,5 @@
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -6,6 +7,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const config = require('./config/config');
 const { testConnection, syncDatabase } = require('./config/database');
+const websocketService = require('./services/websocket.service');
 
 // Import models to initialize associations
 require('./models/associations');
@@ -17,6 +19,7 @@ const operatorRoutes = require('./routes/operator.routes');
 const adminRoutes = require('./routes/admin.routes');
 
 const app = express();
+const server = http.createServer(app);
 
 // Security middleware
 app.use(helmet());
@@ -111,12 +114,16 @@ const startServer = async () => {
       }
     }
     
+    // Initialize WebSocket server
+    websocketService.initializeWebSocket(server);
+    
     // Start listening
-    app.listen(config.port, () => {
+    server.listen(config.port, () => {
       console.log(`🚀 Server running on port ${config.port}`);
       console.log(`📝 Environment: ${config.env}`);
       console.log(`🌐 API available at http://localhost:${config.port}/api`);
       console.log(`📚 API Documentation: http://localhost:${config.port}/api-docs`);
+      console.log(`🔌 WebSocket server ready`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
@@ -126,4 +133,4 @@ const startServer = async () => {
 
 startServer();
 
-module.exports = app;
+module.exports = { app, server };

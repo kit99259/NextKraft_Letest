@@ -108,11 +108,33 @@ const getProjectDetailsWithParkingSystemAndPallets = async (req, res) => {
   }
 };
 
+// Get Parking System Status Controller (Operator and Customer)
+const getParkingSystemStatus = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    const result = await parkingSystemService.getParkingSystemStatus(userId, userRole);
+    
+    return successResponse(res, result, 'Parking system status retrieved successfully');
+  } catch (error) {
+    console.error('Get parking system status error:', error);
+    const statusCode = error.message === 'Operator profile not found' ||
+                      error.message === 'Customer profile not found' ||
+                      error.message === 'Operator is not assigned to any parking system' ||
+                      error.message === 'Customer is not assigned to any parking system' ||
+                      error.message === 'Parking system not found' ||
+                      error.message === 'Invalid user role. Only operator and customer roles are allowed' ? 404 : 500;
+    return errorResponse(res, error.message || 'Failed to retrieve parking system status', statusCode);
+  }
+};
+
 module.exports = {
   createParkingSystem,
   getProjectListWithParkingSystems,
   getPalletDetails,
   generatePallets,
-  getProjectDetailsWithParkingSystemAndPallets
+  getProjectDetailsWithParkingSystemAndPallets,
+  getParkingSystemStatus
 };
 

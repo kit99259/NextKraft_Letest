@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Client - NextKraft API</title>
+    <!-- Socket.IO Client Library -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .config-section {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .config-section input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .button-group {
+            margin: 15px 0;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-connect {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-disconnect {
+            background-color: #f44336;
+            color: white;
+        }
+        .btn-ping {
+            background-color: #2196F3;
+            color: white;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .status.connecting {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .events-log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .event-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #007acc;
+            padding-left: 10px;
+        }
+        .event-entry.success {
+            border-left-color: #4CAF50;
+        }
+        .event-entry.error {
+            border-left-color: #f44336;
+        }
+        .event-entry.warning {
+            border-left-color: #ff9800;
+        }
+        .event-time {
+            color: #888;
+            font-size: 10px;
+        }
+        .event-data {
+            color: #9cdcfe;
+            margin-top: 5px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 WebSocket Client - NextKraft API</h1>
+        
+        <div class="config-section">
+            <h3>Configuration</h3>
+            <label>Server URL:</label>
+            <input type="text" id="serverUrl" value="http://localhost:3000" placeholder="http://localhost:3000">
+            
+            <label>JWT Token:</label>
+            <input type="password" id="jwtToken" placeholder="Enter your JWT token">
+            
+            <div class="button-group">
+                <button id="connectBtn" class="btn-connect" onclick="connect()">Connect</button>
+                <button id="disconnectBtn" class="btn-disconnect" onclick="disconnect()" disabled>Disconnect</button>
+                <button id="pingBtn" class="btn-ping" onclick="sendPing()" disabled>Send Ping</button>
+                <button onclick="clearLog()">Clear Log</button>
+            </div>
+        </div>
+
+        <div id="status" class="status disconnected">Disconnected</div>
+
+        <h3>Events Log</h3>
+        <div id="eventsLog" class="events-log"></div>
+    </div>
+
+    <script>
+        let socket = null;
+
+        function log(message, type = 'info', data = null) {
+            const logDiv = document.getElementById('eventsLog');
+            const entry = document.createElement('div');
+            entry.className = `event-entry ${type}`;
+            
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `
+                <span class="event-time">[${time}]</span> ${message}
+                ${data ? `<div class="event-data">${JSON.stringify(data, null, 2)}</div>` : ''}
+            `;
+            
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStatus(status, message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${status}`;
+            statusDiv.textContent = message;
+        }
+
+        function updateButtons(connected) {
+            document.getElementById('connectBtn').disabled = connected;
+            document.getElementById('disconnectBtn').disabled = !connected;
+            document.getElementById('pingBtn').disabled = !connected;
+        }
+
+        function connect() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const jwtToken = document.getElementById('jwtToken').value;
+
+            if (!jwtToken) {
+                alert('Please enter a JWT token');
+                return;
+            }
+
+            if (socket && socket.connected) {
+                log('Already connected', 'warning');
+                return;
+            }
+
+            updateStatus('connecting', 'Connecting...');
+            log('Attempting to connect to: ' + serverUrl, 'info');
+
+            socket = io(serverUrl, {
+                auth: {
+                    token: jwtToken
+                },
+                transports: ['websocket', 'polling'],
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                reconnectionAttempts: 5,
+                timeout: 20000
+            });
+
+            // Connection events
+            socket.on('connect', () => {
+                log('✅ Connected to WebSocket server', 'success', { socketId: socket.id });
+                updateStatus('connected', 'Connected (Socket ID: ' + socket.id + ')');
+                updateButtons(true);
+                socket.emit('ping');
+            });
+
+            socket.on('connected', (data) => {
+                log('📨 Connection confirmed from server', 'success', data);
+            });
+
+            socket.on('connect_error', (error) => {
+                log('❌ Connection error: ' + error.message, 'error');
+                updateStatus('disconnected', 'Connection Error');
+                updateButtons(false);
+            });
+
+            socket.on('disconnect', (reason) => {
+                log('❌ Disconnected: ' + reason, 'warning');
+                updateStatus('disconnected', 'Disconnected');
+                updateButtons(false);
+            });
+
+            socket.on('reconnect_attempt', (attemptNumber) => {
+                log(`🔄 Reconnection attempt ${attemptNumber}...`, 'warning');
+            });
+
+            socket.on('reconnect', (attemptNumber) => {
+                log(`✅ Reconnected after ${attemptNumber} attempts`, 'success');
+                updateStatus('connected', 'Reconnected');
+                updateButtons(true);
+            });
+
+            // Keep-alive
+            socket.on('pong', (data) => {
+                log('🏓 Pong received', 'info', data);
+            });
+
+            // Parking Request Events
+            socket.on('new_parking_request', (data) => {
+                log('🚗 New parking request', 'info', data);
+            });
+
+            socket.on('parking_request_status_changed', (data) => {
+                log('🔄 Parking request status changed', 'info', data);
+            });
+
+            socket.on('parking_request_accepted', (data) => {
+                log('✅ Parking request accepted', 'success', data);
+            });
+
+            // Pallet Events
+            socket.on('pallet_assigned', (data) => {
+                log('📍 Pallet assigned', 'success', data);
+            });
+
+            // Car Release Events
+            socket.on('car_release_request', (data) => {
+                log('🚪 Car release request', 'info', data);
+            });
+
+            socket.on('car_released', (data) => {
+                log('🚗 Car released', 'success', data);
+            });
+
+            // Request Events
+            socket.on('request_status_changed', (data) => {
+                log('🔄 Request status changed', 'info', data);
+            });
+
+            socket.on('request_accepted', (data) => {
+                log('✅ Request accepted', 'success', data);
+            });
+
+            // Parking System Events
+            socket.on('parking_system_status_changed', (data) => {
+                log('🏢 Parking system status changed', 'info', data);
+            });
+
+            // Generic handler for any other events
+            socket.onAny((eventName, ...args) => {
+                log(`📨 Event: ${eventName}`, 'info', args);
+            });
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                log('Disconnected from server', 'warning');
+                updateStatus('disconnected', 'Disconnected');
+                updateButtons(false);
+            }
+        }
+
+        function sendPing() {
+            if (socket && socket.connected) {
+                socket.emit('ping');
+                log('🏓 Ping sent', 'info');
+            }
+        }
+
+        function clearLog() {
+            document.getElementById('eventsLog').innerHTML = '';
+        }
+
+        // Auto-connect on page load (optional - remove if you don't want this)
+        // window.addEventListener('load', () => {
+        //     log('WebSocket client ready. Click Connect to start.', 'info');
+        // });
+    </script>
+</body>
+</html>
+
+

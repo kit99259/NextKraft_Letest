@@ -1,5 +1,6 @@
 const { User } = require('../models/associations');
 const { generateToken } = require('../utils');
+const websocketService = require('./websocket.service');
 
 // Sign Up Service
 const signUp = async (username, password) => {

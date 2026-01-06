@@ -1,6 +1,8 @@
 const { Op } = require('sequelize');
+const crypto = require('crypto');
 const notificationService = require('./notification.service');
 const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request, RequestQueue, ParkingRequest } = require('../models/associations');
+const websocketService = require('./websocket.service');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -13,6 +15,54 @@ const getISTTime = () => {
   // Create IST time
   const istTime = new Date(utcTime + istOffset);
   return istTime;
+};
+
+// Helper function to emit WebSocket event to all customers in a project when parking system status changes
+const emitParkingSystemStatusToProjectCustomers = async (projectId, parkingSystemId, status, updatedAt) => {
+  if (!projectId) {
+    return;
+  }
+
+  try {
+    
+    // Get all customers for this project
+    const projectCustomers = await Customer.findAll({
+      where: {
+        ProjectId: projectId,
+        ParkingSystemId: parkingSystemId,
+        Status: 'Approved'
+      },
+      attributes: ['UserId'],
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['Id', 'Role'],
+          where: { Role: 'customer' },
+          required: true
+        }
+      ]
+    });
+
+    // Extract user IDs
+    const customerUserIds = projectCustomers
+      .map(customer => customer.UserId)
+      .filter(userId => userId !== null && userId !== undefined);
+
+    // Emit to all customers in the project
+    if (customerUserIds.length > 0) {
+      websocketService.emitToUsers(customerUserIds, 'parking_system_status_changed', {
+        parkingSystemId: parkingSystemId,
+        status: status,
+        projectId: projectId,
+        updatedAt: updatedAt
+      });
+      console.log(`📤 WebSocket: Emitted parking system status (${status}) to ${customerUserIds.length} customers in project ${projectId}`);
+    }
+  } catch (error) {
+    console.error('Error emitting WebSocket event to customers:', error);
+    // Don't throw error, just log it
+  }
 };
 
 // Create Operator Service
@@ -356,7 +406,7 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
     }
 
     // Validate parking request status (should be Pending or Accepted)
-    if (!['Pending', 'Accepted'].includes(parkingRequest.Status)) {
+    if (!['Pending', 'Accepted', 'Queued'].includes(parkingRequest.Status)) {
       throw new Error(`Cannot assign pallet to a parking request with status: ${parkingRequest.Status}`);
     }
 
@@ -409,12 +459,40 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
 
     if (!car) {
       // Car doesn't exist - need to create user, customer, and car
-      const dummyUsername = 'erhtghgkdgdutng534653';
+      // Step: Find or create dummy user for this parking system
+      // Each parking system should have only one dummy user
       
-      // Check if user with this username exists
-      let user = await User.findOne({ where: { Username: dummyUsername } });
-      
-      if (!user) {
+      // First, check if there's already a dummy customer for this parking system
+      // (which means there's already a dummy user for this parking system)
+      let existingDummyCustomer = await Customer.findOne({
+        where: {
+          ParkingSystemId: operator.ParkingSystemId,
+          ProjectId: operator.ProjectId
+        },
+        include: [
+          {
+            model: User,
+            as: 'user',
+            where: {
+              Username: { [Op.like]: 'dummynextcraft%' }
+            },
+            attributes: ['Id', 'Username', 'Role']
+          }
+        ]
+      });
+
+      let user = null;
+
+      if (existingDummyCustomer && existingDummyCustomer.user) {
+        // Dummy user already exists for this parking system, use it
+        user = existingDummyCustomer.user;
+        customer = existingDummyCustomer;
+      } else {
+        // No dummy user exists for this parking system, create a new one
+        // Generate UUID for username
+        const uuid = crypto.randomUUID();
+        const dummyUsername = `dummynextcraft${uuid}`;
+        
         // Create user with dummy password
         const bcrypt = require('bcryptjs');
         const hashedPassword = await bcrypt.hash('dummy123', 10);
@@ -425,7 +503,7 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
           Role: 'customer'
         });
 
-        // Create dummy customer
+        // Create dummy customer for this parking system
         const istTime = getISTTime();
         customer = await Customer.create({
           UserId: user.Id,
@@ -454,54 +532,6 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
             }
           ]
         });
-      } else {
-        // User exists - find or create customer
-        customer = await Customer.findOne({
-          where: {
-            UserId: user.Id,
-            ProjectId: operator.ProjectId,
-            ParkingSystemId: operator.ParkingSystemId
-          },
-          include: [
-            {
-              model: User,
-              as: 'user',
-              attributes: ['Id', 'Username', 'Role']
-            }
-          ]
-        });
-
-        if (!customer) {
-          // Create customer for existing user
-          const istTime = getISTTime();
-          customer = await Customer.create({
-            UserId: user.Id,
-            FirstName: 'Dummy',
-            LastName: 'Customer',
-            Email: null,
-            MobileNumber: null,
-            ProjectId: operator.ProjectId,
-            ParkingSystemId: operator.ParkingSystemId,
-            FlatNumber: null,
-            Profession: null,
-            Status: 'Approved', // Auto-approve dummy customer
-            ApprovedBy: operatorUserId,
-            ApprovedAt: istTime,
-            CreatedAt: istTime,
-            UpdatedAt: istTime
-          });
-          
-          // Reload with user association
-          await customer.reload({
-            include: [
-              {
-                model: User,
-                as: 'user',
-                attributes: ['Id', 'Username', 'Role']
-              }
-            ]
-          });
-        }
       }
 
       userId = user.Id;
@@ -573,7 +603,7 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
       parkingRequest = existingParkingRequest;
       
       // Validate parking request status (should be Pending or Accepted)
-      if (!['Pending', 'Accepted'].includes(parkingRequest.Status)) {
+      if (!['Pending', 'Accepted', 'Queued'].includes(parkingRequest.Status)) {
         throw new Error(`Cannot assign pallet to a parking request with status: ${parkingRequest.Status}`);
       }
     }
@@ -671,6 +701,9 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
     }
   };
 
+  // Format the time to parking
+  const timeToParkingFormatted = formatTime(timeToParking);
+
   // Step 14: Check if car is already assigned to another pallet
   const existingPalletAssignment = await PalletAllotment.findOne({
     where: {
@@ -696,7 +729,7 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
 
   // Step 15.1: Mark the specific parking request as completed
   await parkingRequest.update({
-    Status: 'Completed',
+    Status: 'Accepted',
     UpdatedAt: istTime
   });
 
@@ -711,6 +744,14 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
         Id: operator.ParkingSystemId
       }
     }
+  );
+
+  // Emit WebSocket event to all customers in the project
+  await emitParkingSystemStatusToProjectCustomers(
+    operator.ProjectId,
+    operator.ParkingSystemId,
+    'PalletMovingToParking',
+    istTime
   );
 
   // Step 11: Reload pallet with associations
@@ -741,24 +782,121 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
     ]
   });
 
-  // Send notification to customer when pallet is assigned
+  // Send notification to customer when pallet is moving to parking
   if (customer && customer.user) {
     const palletInfo = pallet.UserGivenPalletNumber || `Level ${pallet.Level}, Column ${pallet.Column}`;
     const carInfo = pallet.car ? `${pallet.car.CarCompany} ${pallet.car.CarModel} (${pallet.car.CarNumber})` : 'your car';
     
     await notificationService.sendNotificationToUser(
       customer.UserId,
-      'Pallet Assigned',
-      `A pallet (${palletInfo}) has been assigned to you for ${carInfo}`,
+      'Parking Request Accepted',
+      `Your parking request has been accepted. Pallet ${ palletInfo } is being moved to parking level with car ${ carInfo }. Estimated time: ${timeToParkingFormatted}.`,
       {
-        type: 'pallet_assigned',
-        palletId: palletId.toString(),
-        customerId: customer.Id.toString(),
-        carId: car ? car.Id.toString() : null,
-        parkingRequestId: parkingRequestId.toString()
+        type: 'parking_request_accepted',
+        requestId: parkingRequest.Id,
+        palletId: palletId,
+        carId: car.Id,
+        status: parkingRequest.Status,
+        estimatedTime: timeToParking,
+        estimatedTimeFormatted: timeToParkingFormatted
       }
     );
+
+    // Emit WebSocket event to all customer
+    
+    await websocketService.emitToUser(customer.UserId, 'parking_request_accepted', {
+      palletId: palletId.toString(),
+      customerId: customer.Id.toString(),
+      carId: car ? car.Id.toString() : null,
+      status: pallet.Status,
+      parkingRequestId: parkingRequestId !== null ? parkingRequestId.toString() : null,
+      estimatedTime: timeToParking,
+      estimatedTimeFormatted: timeToParkingFormatted
+    });
   }
+
+  // Store variables for delayed task
+  const delayedParkingRequestId = parkingRequest.Id;
+  const delayedCustomer = customer;
+  const delayedPalletId = palletId;
+  const delayedCar = car;
+  const delayedTimeToParking = timeToParking;
+
+  // Set up delayed task to complete parking request and send notification
+  setTimeout(async () => {
+    try {
+      // Reload pallet to get fresh data
+      const updatedPallet = await PalletAllotment.findByPk(delayedPalletId, {
+        include: [
+          {
+            model: Car,
+            as: 'car',
+            attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+          },
+          {
+            model: Project,
+            as: 'project',
+            attributes: ['Id', 'ProjectName', 'SocietyName']
+          },
+          {
+            model: ParkingSystem,
+            as: 'parkingSystem',
+            attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
+          }
+        ]
+      });
+
+      if (!updatedPallet) {
+        console.error(`Pallet ${delayedPalletId} not found for delayed completion`);
+        return;
+      }
+
+      // Update parking request status to Completed
+      const istTime = getISTTime();
+      await ParkingRequest.update(
+        {
+          Status: 'Completed',
+          UpdatedAt: istTime
+        },
+        {
+          where: {
+            Id: delayedParkingRequestId
+          }
+        }
+      );
+
+      // Send notification to customer when pallet is assigned
+      if (delayedCustomer && delayedCustomer.user) {
+        const palletInfo = updatedPallet.UserGivenPalletNumber || `Level ${updatedPallet.Level}, Column ${updatedPallet.Column}`;
+        const carInfo = updatedPallet.car ? `${updatedPallet.car.CarCompany} ${updatedPallet.car.CarModel} (${updatedPallet.car.CarNumber})` : 'your car';
+        
+        await notificationService.sendNotificationToUser(
+          delayedCustomer.UserId,
+          'Pallet Assigned',
+          `A pallet (${palletInfo}) has been assigned to you for ${carInfo}`,
+          {
+            type: 'pallet_assigned',
+            palletId: delayedPalletId.toString(),
+            customerId: delayedCustomer.Id.toString(),
+            carId: delayedCar ? delayedCar.Id.toString() : null,
+            parkingRequestId: delayedParkingRequestId !== null ? delayedParkingRequestId.toString() : null
+          }
+        );
+
+        // Emit WebSocket event to all customer
+        
+        await websocketService.emitToUser(delayedCustomer.UserId, 'pallet_assigned', {
+          palletId: delayedPalletId.toString(),
+          customerId: delayedCustomer.Id.toString(),
+          carId: delayedCar ? delayedCar.Id.toString() : null,
+          status: updatedPallet.Status,
+          parkingRequestId: delayedParkingRequestId !== null ? delayedParkingRequestId.toString() : null
+        });
+      }
+    } catch (error) {
+      console.error('Error in delayed parking request completion:', error);
+    }
+  }, delayedTimeToParking * 1000); // Convert seconds to milliseconds
 
   return {
     pallet: {
@@ -1132,6 +1270,15 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
         status: newStatus
       }
     );
+
+    // Emit WebSocket event for real-time update
+    
+    websocketService.emitToUser(request.user.Id, 'request_status_changed', {
+      requestId: request.Id,
+      carId: request.CarId,
+      status: newStatus,
+      updatedAt: istTime
+    });
   }
 
   return {
@@ -1367,8 +1514,13 @@ const getOperatorCustomersWithCars = async (operatorUserId) => {
   };
 };
 
-// Approve Customer (Operator)
-const approveCustomer = async (operatorUserId, customerId) => {
+// Update Customer Status (Operator) - Approve or Reject
+const updateCustomerStatus = async (operatorUserId, customerId, status) => {
+  // Validate status
+  if (status !== 'Approved' && status !== 'Rejected') {
+    throw new Error('Status must be either "Approved" or "Rejected"');
+  }
+
   // Validate operator exists
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId }
@@ -1391,11 +1543,14 @@ const approveCustomer = async (operatorUserId, customerId) => {
 
   const istTime = getISTTime();
   await customer.update({
-    Status: 'Approved',
+    Status: status,
     ApprovedBy: operatorUserId,
     ApprovedAt: istTime,
     UpdatedAt: istTime
   });
+
+  // Reload customer to get updated values
+  await customer.reload();
 
   return {
     id: customer.Id,
@@ -1537,6 +1692,14 @@ const callEmptyPallet = async (operatorUserId, customerId = null) => {
         Id: parkingSystem.Id
       }
     }
+  );
+
+  // Emit WebSocket event to all customers in the project
+  await emitParkingSystemStatusToProjectCustomers(
+    operator.ProjectId,
+    parkingSystem.Id,
+    'PalletMovingToGround',
+    istTime
   );
 
   // Step 5: Format time in human-readable format
@@ -1698,6 +1861,14 @@ const callSpecificPallet = async (operatorUserId, palletId, requestId) => {
     }
   );
 
+  // Emit WebSocket event to all customers in the project
+  await emitParkingSystemStatusToProjectCustomers(
+    operator.ProjectId,
+    parkingSystem.Id,
+    'PalletMovingToGround',
+    istTime
+  );
+
   // Step 11: Format time in human-readable format
   const formatTime = (seconds) => {
     const minutes = Math.floor(seconds / 60);
@@ -1728,6 +1899,16 @@ const callSpecificPallet = async (operatorUserId, palletId, requestId) => {
       }
     );
   }
+  
+  // Emit WebSocket event to customer
+  await websocketService.emitToUser(request.UserId, 'request_accepted', {
+    requestId: request.Id,
+    palletId: palletId,
+    carId: request.CarId,
+    status: request.Status,
+    estimatedTime: timeToCall,
+    estimatedTimeFormatted: timeToCallFormatted
+  });
 
   return {
     palletId: pallet.Id,
@@ -1793,6 +1974,14 @@ const updateParkingSystemStatus = async (operatorUserId, status) => {
         Id: parkingSystem.Id
       }
     }
+  );
+
+  // Emit WebSocket event to all customers in the project
+  await emitParkingSystemStatusToProjectCustomers(
+    operator.ProjectId,
+    parkingSystem.Id,
+    status,
+    istTime
   );
 
   // Step 5: Reload parking system to get updated data
@@ -1972,6 +2161,14 @@ const releaseParkedCar = async (operatorUserId, palletId) => {
     }
   );
 
+  // Emit WebSocket event to all customers in the project
+  await emitParkingSystemStatusToProjectCustomers(
+    operator.ProjectId,
+    parkingSystem.Id,
+    'PalletMovingToParking',
+    istTime
+  );
+
   // Step 12: Insert into RequestQueue as history
   await RequestQueue.create({
     UserId: request.UserId,
@@ -2020,6 +2217,14 @@ const releaseParkedCar = async (operatorUserId, palletId) => {
         requestId: requestId.toString()
       }
     );
+
+    // Emit WebSocket event to customer
+    await websocketService.emitToUser(request.UserId, 'car_released', {
+      palletId: palletId,
+      requestId: requestId,
+      carId: request.CarId,
+      status: request.Status
+    });
   }
 
   return {
@@ -2224,6 +2429,14 @@ const callPalletAndCreateRequest = async (operatorUserId, palletId) => {
     }
   );
 
+  // Emit WebSocket event to all customers in the project
+  await emitParkingSystemStatusToProjectCustomers(
+    operator.ProjectId,
+    parkingSystem.Id,
+    'PalletMovingToGround',
+    istTime
+  );
+
   // Step 13: Format time in human-readable format
   const formatTime = (seconds) => {
     const minutes = Math.floor(seconds / 60);
@@ -2253,6 +2466,16 @@ const callPalletAndCreateRequest = async (operatorUserId, palletId) => {
         estimatedTimeFormatted: timeToCallFormatted
       }
     );
+
+    // Emit WebSocket event to customer
+    await websocketService.emitToUser(pallet.UserId, 'request_accepted', {
+      requestId: request.Id,
+      palletId: palletId,
+      carId: pallet.CarId,
+      status: request.Status,
+      estimatedTime: timeToCall,
+      estimatedTimeFormatted: timeToCallFormatted
+    });
   }
 
   return {
@@ -2321,29 +2544,26 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
 
   const parkingSystem = operator.parkingSystem;
 
-  // Step 4: Find car with matching last 6 digits (unique)
-  const car = await Car.findOne({
+  // Step 4: Find all cars with matching last 6 digits
+  const matchingCars = await Car.findAll({
     where: {
       CarNumber: { [Op.like]: `%${carNumberLast6}` }
     },
-    include: [
-      {
-        model: User,
-        as: 'user',
-        attributes: ['Id', 'Username', 'Role']
-      }
-    ]
+    attributes: ['Id', 'UserId', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
   });
 
-  if (!car) {
+  if (!matchingCars || matchingCars.length === 0) {
     throw new Error(`No car found with last 6 digits: ${carNumberLast6}`);
   }
 
-  // Step 5: Find if this car is parked (assigned to a pallet in operator's parking system)
+  // Step 5: Find which of these cars is parked in operator's parking system
+  // Get car IDs from matching cars
+  const matchingCarIds = matchingCars.map(c => c.Id);
+
+  // Find the pallet that matches: CarId in the list AND ParkingSystemId matches AND Status is 'Assigned'
   const parkedPallet = await PalletAllotment.findOne({
     where: {
-      CarId: car.Id,
-      UserId: car.UserId,
+      CarId: { [Op.in]: matchingCarIds },
       ParkingSystemId: operator.ParkingSystemId,
       Status: 'Assigned'
     },
@@ -2356,7 +2576,7 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
       {
         model: Car,
         as: 'car',
-        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber'],
+        attributes: ['Id', 'UserId', 'CarType', 'CarModel', 'CarCompany', 'CarNumber'],
         include: [
           {
             model: User,
@@ -2370,6 +2590,13 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
 
   if (!parkedPallet) {
     throw new Error(`Car with last 6 digits ${carNumberLast6} is not parked in your parking system`);
+  }
+
+  // Get the car from the parked pallet (this is the car that matches both criteria)
+  const car = parkedPallet.car;
+  
+  if (!car) {
+    throw new Error('Car information not found for parked pallet');
   }
 
   // Step 6: Check if there's already a request for this pallet
@@ -2449,7 +2676,7 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
     ParkingSystemId: operator.ParkingSystemId,
     CarId: car.Id,
     OperatorId: operator.Id,
-    Status: 'Pending',
+    Status: 'Accepted',
     EstimatedTime: timeToCall,
     CreatedAt: istTime,
     UpdatedAt: istTime
@@ -2466,6 +2693,14 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
         Id: parkingSystem.Id
       }
     }
+  );
+
+  // Emit WebSocket event to all customers in the project
+  await emitParkingSystemStatusToProjectCustomers(
+    operator.ProjectId,
+    parkingSystem.Id,
+    'PalletMovingToGround',
+    istTime
   );
 
   // Step 12: Format time in human-readable format
@@ -2487,16 +2722,26 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
   if (customer && customer.user) {
     await notificationService.sendNotificationToUser(
       car.UserId,
-      'Car Release Request Created',
-      `Your car release request has been created and is pending. Estimated time: ${timeToCallFormatted}.`,
+      'Car Release Request Accepted',
+      `Your car release request has been accepted. Pallet is being moved to ground level. Estimated time: ${timeToCallFormatted}.`,
       {
-        type: 'car_release_request',
+        type: 'request_accepted',
         requestId: request.Id.toString(),
         palletId: parkedPallet.Id.toString(),
         estimatedTime: timeToCall,
         estimatedTimeFormatted: timeToCallFormatted
       }
     );
+
+    // Emit WebSocket event to customer
+    await websocketService.emitToUser(car.UserId, 'request_accepted', {
+      requestId: request.Id,
+      palletId: parkedPallet.Id,
+      carId: car.Id,
+      status: request.Status,
+      estimatedTime: timeToCall,
+      estimatedTimeFormatted: timeToCallFormatted
+    });
   }
 
   return {
@@ -2545,7 +2790,7 @@ module.exports = {
   updateRequestStatus,
   updateOperatorPalletPower,
   getOperatorCustomersWithCars,
-  approveCustomer,
+  updateCustomerStatus,
   callEmptyPallet,
   updateParkingSystemStatus,
   releaseParkedCar,

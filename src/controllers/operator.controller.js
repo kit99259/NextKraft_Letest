@@ -181,24 +181,37 @@ const getOperatorCustomersWithCars = async (req, res) => {
   }
 };
 
-// Approve Customer (Operator)
-const approveCustomer = async (req, res) => {
+// Update Customer Status (Operator) - Approve or Reject
+const updateCustomerStatus = async (req, res) => {
   try {
     const operatorUserId = req.user.id; // authenticated operator userId
-    const { customerId } = req.body;
+    const { customerId, status } = req.query;
 
-    const result = await operatorService.approveCustomer(
+    if (!customerId) {
+      return errorResponse(res, 'customerId is required', 400);
+    }
+
+    if (!status) {
+      return errorResponse(res, 'status is required', 400);
+    }
+
+    const result = await operatorService.updateCustomerStatus(
       operatorUserId,
-      parseInt(customerId)
+      parseInt(customerId),
+      status
     );
 
-    return successResponse(res, result, 'Customer approved successfully');
+    const message = status === 'Approved' ? 'Customer approved successfully' : 'Customer rejected successfully';
+    return successResponse(res, result, message);
   } catch (error) {
-    console.error('Approve customer error:', error);
+    console.error('Update customer status error:', error);
     const statusCode = error.message === 'Operator profile not found' ||
                        error.message === 'Customer not found' ? 404 :
-                       error.message === 'Customer does not belong to the same project as the operator' ? 400 : 500;
-    return errorResponse(res, error.message || 'Failed to approve customer', statusCode);
+                       error.message === 'Customer does not belong to the same project as the operator' ||
+                       error.message === 'Status must be either "Approved" or "Rejected"' ||
+                       error.message === 'customerId is required' ||
+                       error.message === 'status is required' ? 400 : 500;
+    return errorResponse(res, error.message || 'Failed to update customer status', statusCode);
   }
 };
 
@@ -351,7 +364,7 @@ module.exports = {
   updateRequestStatus,
   updateOperatorPalletPower,
   getOperatorCustomersWithCars,
-  approveCustomer,
+  updateCustomerStatus,
   callEmptyPallet,
   updateParkingSystemStatus,
   releaseParkedCar,

@@ -623,31 +623,74 @@ router.put('/parking-requests/:requestId/status', authorize('operator'), parking
 
 /**
  * @swagger
- * /api/operator/customer/approve:
+ * /api/operator/customer/status:
  *   post:
- *     summary: Approve a customer (Operator)
- *     description: Operator approves a customer that belongs to their project. Sets the customer's status to Approved.
+ *     summary: Update customer status (Operator)
+ *     description: Operator updates a customer's status (Approved or Rejected) for customers that belong to their project.
  *     tags: [Operator]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - customerId
- *             properties:
- *               customerId:
- *                 type: integer
- *                 minimum: 1
- *                 example: 12
+ *     parameters:
+ *       - in: query
+ *         name: customerId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Customer ID to update status
+ *         example: 12
+ *       - in: query
+ *         name: status
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [Approved, Rejected]
+ *         description: Status to set for the customer (Approved or Rejected)
+ *         example: Approved
  *     responses:
  *       200:
- *         description: Customer approved successfully
+ *         description: Customer status updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     userId:
+ *                       type: integer
+ *                     firstName:
+ *                       type: string
+ *                     lastName:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     mobileNumber:
+ *                       type: string
+ *                     projectId:
+ *                       type: integer
+ *                     parkingSystemId:
+ *                       type: integer
+ *                     status:
+ *                       type: string
+ *                       enum: [Approved, Rejected, Pending]
+ *                     approvedBy:
+ *                       type: integer
+ *                     approvedAt:
+ *                       type: string
+ *                       format: date-time
+ *                     updatedAt:
+ *                       type: string
+ *                       format: date-time
  *       400:
- *         description: Customer does not belong to the same project as the operator
+ *         description: Invalid status, missing parameters, or customer does not belong to the same project as the operator
  *       401:
  *         description: Unauthorized
  *       403:
@@ -655,7 +698,7 @@ router.put('/parking-requests/:requestId/status', authorize('operator'), parking
  *       404:
  *         description: Operator or customer not found
  */
-router.post('/customer/approve', authorize('operator'), operatorController.approveCustomer);
+router.post('/customer/status', authorize('operator'), operatorController.updateCustomerStatus);
 
 /**
  * @swagger
@@ -2011,6 +2054,43 @@ router.put('/parking-system/status', authorize('operator'), validateUpdateParkin
  *         description: Operator profile not found, pallet not found, or no active request found
  */
 router.post('/release-parked-car', authorize('operator'), validateReleaseParkedCar, operatorController.releaseParkedCar);
+
+/**
+ * @swagger
+ * /api/operator/parking-system-status:
+ *   get:
+ *     summary: Get parking system status (Operator only)
+ *     description: Returns the status of the parking system assigned to the authenticated operator.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Parking system status retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       enum: [Idle, PalletMovingToGround, PalletMovingToParking, AtGround]
+ *                       description: Current status of the parking system
+ *       401:
+ *         description: Unauthorized - Authentication required
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator profile not found or not assigned to parking system
+ */
+router.get('/parking-system-status', authorize('operator'), parkingSystemController.getParkingSystemStatus);
 
 module.exports = router;
 
