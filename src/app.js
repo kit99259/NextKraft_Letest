@@ -24,6 +24,12 @@ const server = http.createServer(app);
 // Security middleware
 app.use(helmet());
 
+app.use(
+  helmet({
+    contentSecurityPolicy: false
+  })
+);
+
 // CORS configuration
 app.use(cors(config.cors));
 
