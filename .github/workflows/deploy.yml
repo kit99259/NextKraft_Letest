@@ -20,4 +20,4 @@ jobs:
             cd /var/www/NextKraft_Letest
             git pull origin main
             npm install --production
-            pm2 restart NextKraft_Letest
+            pm2 restart NextKraft_Letest 
