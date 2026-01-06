@@ -11,12 +11,11 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
-# SSL Certificates (keep ca.pem.example for reference)
+# SSL Certificates
 *.pem
 *.key
 *.crt
 *.cert
-!ca.pem.example
 service_account.json
 # Logs
 logs
