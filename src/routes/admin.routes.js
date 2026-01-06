@@ -152,7 +152,7 @@ router.get('/projects', parkingSystemController.getProjectListWithParkingSystems
  *                           enum: [Tower, Puzzle]
  *                         level:
  *                           type: integer
- *                         levelBelowGround:
+ *                         levelBelowGround: 
  *                           type: integer
  *                           nullable: true
  *                         column:
