@@ -1381,10 +1381,26 @@ const getCustomersWithCarsByProjectIds = async (projectIds) => {
     throw new Error('No valid project IDs provided');
   }
 
+  // Find all dummy users to exclude (users with username starting with 'dummynextcraft')
+  const dummyUsers = await User.findAll({
+    where: { 
+      Username: { [Op.like]: 'dummynextcraft%' }
+    },
+    attributes: ['Id']
+  });
+
+  var dummyUserIds = null;
+  // Exclude all customers associated with dummy users
+  if (dummyUsers && dummyUsers.length > 0) {
+    dummyUserIds = dummyUsers.map(user => user.Id);
+  }
   // Fetch customers belonging to the specified projects
   const customers = await Customer.findAll({
     where: {
-      ProjectId: { [Op.in]: validProjectIds }
+      ProjectId: { [Op.in]: validProjectIds },
+      UserId: {
+        [Op.notIn]: dummyUserIds
+      }
     },
     include: [
       {
