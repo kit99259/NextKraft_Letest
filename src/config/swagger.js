@@ -18,7 +18,7 @@ const options = {
         description: 'Development server'
       },
       {
-        url: 'https://nextkraft-letest.onrender.com',
+        url: 'https://nextkraft.zikasha.com',
         description: 'Production server'
       }
     ],
