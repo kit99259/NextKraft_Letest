@@ -6,6 +6,7 @@ const parkingSystemController = require('../controllers/parkingSystem.controller
 const parkingRequestController = require('../controllers/parkingRequest.controller');
 const { validateCreateOperator } = require('../validators/operator.validator');
 const { validateAssignPallet, validateUpdateRequestStatus, validateCallEmptyPallet, validateUpdateParkingSystemStatus, validateReleaseParkedCar, validateCallSpecificPallet, validateCallPalletAndCreateRequest, validateCallPalletByCarNumber } = require('../validators/pallet.validator');
+const { validateParkingSync } = require('../validators/parkingSync.validator');
 
 // All routes require authentication
 router.use(authenticate);
@@ -1396,8 +1397,8 @@ router.put('/requests/:requestId/status', authorize('operator'), validateUpdateR
  *   post:
  *     summary: Call empty pallet (Operator only)
  *     description: |
- *       For Tower parking: Finds the lowest empty pallet (not assigned to any customer).
- *       For Puzzle parking: Calls the customer's assigned pallet (customerId required).
+ *       For Tower parking: Finds the lowest empty pallet that fits the requested car type (pallet CarType matches or is unset).
+ *       For Puzzle parking: Calls the customer's assigned pallet (customerId required). carType is optional for Puzzle.
  *       Returns pallet information and calculated time to call the empty pallet.
  *     tags: [Operator]
  *     security:
@@ -1409,6 +1410,11 @@ router.put('/requests/:requestId/status', authorize('operator'), validateUpdateR
  *           schema:
  *             type: object
  *             properties:
+ *               carType:
+ *                 type: string
+ *                 enum: [Sedan, SUV]
+ *                 description: Required for Tower — picks lowest empty pallet for this type (pallet CarType matches or is null).
+ *                 example: Sedan
  *               customerId:
  *                 type: integer
  *                 minimum: 1
@@ -1435,6 +1441,11 @@ router.put('/requests/:requestId/status', authorize('operator'), validateUpdateR
  *                     palletNumber:
  *                       type: string
  *                       description: User-given pallet number
+ *                     carType:
+ *                       type: string
+ *                       enum: [Sedan, SUV]
+ *                       nullable: true
+ *                       description: Pallet slot car type (null if generic)
  *                     level:
  *                       type: integer
  *                       nullable: true
@@ -1471,7 +1482,7 @@ router.put('/requests/:requestId/status', authorize('operator'), validateUpdateR
  *       403:
  *         description: Forbidden - Operator access required
  *       404:
- *         description: Operator profile not found, no empty pallet available, or customer not found
+ *         description: Operator profile not found, no empty pallet for this car type (Tower), or customer/pallet not found (Puzzle)
  */
 router.post('/call-empty-pallet', authorize('operator'), validateCallEmptyPallet, operatorController.callEmptyPallet);
 
@@ -2091,6 +2102,85 @@ router.post('/release-parked-car', authorize('operator'), validateReleaseParkedC
  *         description: Operator profile not found or not assigned to parking system
  */
 router.get('/parking-system-status', authorize('operator'), parkingSystemController.getParkingSystemStatus);
+
+/**
+ * @swagger
+ * /api/operator/parking-sync:
+ *   post:
+ *     summary: Sync PLC parking/retrieve history (Operator only)
+ *     description: |
+ *       Syncs local PLC car allot history into existing platform tables.
+ *       Uses operator's assigned project and parking system from JWT context.
+ *       Supports partial success: valid rows are applied while failed rows are returned.
+ *       Retries are best-effort deduplicated by current database state.
+ *       Duplicate rows in one request are skipped using row id when present, otherwise floorMapping.id+parkingTime+carNumber+retriveTime.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - carAllotHistory
+ *             properties:
+ *               carAllotHistory:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [floorMappingId, carNumber, parkingTime, floorMapping]
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: Optional client history row id; echoed as historyId in the response when present.
+ *                     isParkingSync:
+ *                       type: boolean
+ *                       description: If true, parking side for this row is already synced on server.
+ *                     isRetrivalSync:
+ *                       type: boolean
+ *                       description: If true, retrival side for this row is already synced on server.
+ *                     carNumber:
+ *                       type: string
+ *                     parkingTime:
+ *                       type: string
+ *                       format: date-time
+ *                     retriveTime:
+ *                       type: string
+ *                       format: date-time
+ *                       nullable: true
+ *                     updatedAt:
+ *                       type: string
+ *                       format: date-time
+ *                     floorMapping:
+ *                       type: object
+ *                       required: [id, parkingSystemId, floor, floorColumn]
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         parkingSystemId:
+ *                           type: integer
+ *                         floor:
+ *                           type: integer
+ *                         floorColumn:
+ *                           type: integer
+ *                         carType:
+ *                           type: string
+ *                           enum: [Sedan, SUV, Suv]
+ *     responses:
+ *       200:
+ *         description: Sync processed
+ *       400:
+ *         description: Validation error or operator assignment issue
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Operator profile not found
+ */
+router.post('/parking-sync', authorize('operator'), validateParkingSync, operatorController.parkingSync);
 
 module.exports = router;
 

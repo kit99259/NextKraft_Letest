@@ -284,6 +284,7 @@ const generatePallets = async (parkingSystemId, startingPalletNumber) => {
           Column: currentColumn,
           UserGivenPalletNumber: currentPalletNumber.toString(),
           CarId: null,
+          CarType: null,
           Status: 'Released',
           CreatedAt: istTime,
           UpdatedAt: istTime
@@ -320,6 +321,7 @@ const generatePallets = async (parkingSystemId, startingPalletNumber) => {
           Column: currentColumn,
           UserGivenPalletNumber: currentPalletNumber.toString(),
           CarId: null,
+          CarType: null,
           Status: 'Released',
           CreatedAt: istTime,
           UpdatedAt: istTime
@@ -348,6 +350,7 @@ const generatePallets = async (parkingSystemId, startingPalletNumber) => {
         Column: parkingSystem.Column,
         UserGivenPalletNumber: currentPalletNumber.toString(),
         CarId: null,
+        CarType: null,
         Status: 'Released',
         CreatedAt: istTime,
         UpdatedAt: istTime
@@ -377,6 +380,7 @@ const generatePallets = async (parkingSystemId, startingPalletNumber) => {
           Column: currentColumn,
           UserGivenPalletNumber: currentPalletNumber.toString(),
           CarId: null,
+          CarType: null,
           Status: 'Released',
           CreatedAt: istTime,
           UpdatedAt: istTime

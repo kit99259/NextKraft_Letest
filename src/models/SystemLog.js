@@ -1,37 +1,29 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
-const { CAR_TYPE_VALUES } = require('../utils/constant');
 
-const Car = sequelize.define('Car', {
+const SystemLog = sequelize.define('SystemLog', {
   Id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
     autoIncrement: true
   },
-  UserId: {
+  PlcLogId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: {
-      model: 'users',
-      key: 'Id'
-    }
+    unique: true
   },
-  CarType: {
-    type: DataTypes.ENUM(...CAR_TYPE_VALUES),
-    allowNull: true,
-    defaultValue: null
+  Type: {
+    type: DataTypes.STRING(255),
+    allowNull: false,
+    defaultValue: ''
   },
-  CarModel: {
-    type: DataTypes.STRING(100),
-    allowNull: true
+  LogKey: {
+    type: DataTypes.STRING(255),
+    allowNull: false
   },
-  CarCompany: {
-    type: DataTypes.STRING(100),
-    allowNull: true
-  },
-  CarNumber: {
-    type: DataTypes.STRING(50),
-    allowNull: true
+  LogValue: {
+    type: DataTypes.TEXT,
+    allowNull: false
   },
   CreatedAt: {
     type: DataTypes.DATE,
@@ -44,11 +36,10 @@ const Car = sequelize.define('Car', {
     defaultValue: DataTypes.NOW
   }
 }, {
-  tableName: 'cars',
+  tableName: 'system_logs',
   timestamps: true,
   createdAt: 'CreatedAt',
   updatedAt: 'UpdatedAt'
 });
 
-module.exports = Car;
-
+module.exports = SystemLog;

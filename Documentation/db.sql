@@ -112,7 +112,7 @@ CREATE TABLE parking_system (
 CREATE TABLE cars (
     Id INT AUTO_INCREMENT PRIMARY KEY,
     UserId INT NOT NULL,
-    CarType VARCHAR(50),
+    CarType ENUM('Sedan', 'SUV') NULL,
     CarModel VARCHAR(100),
     CarCompany VARCHAR(100),
     CarNumber VARCHAR(50),
@@ -135,6 +135,7 @@ CREATE TABLE PalletDetails (
     `Column` INT NOT NULL,
     UserGivenPalletNumber VARCHAR(50),
     CarId INT NULL,
+    CarType ENUM('Sedan', 'SUV') NULL,
     Status ENUM('Assigned', 'Released') DEFAULT 'Released',
     CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -206,4 +207,34 @@ CREATE TABLE parking_requests (
     FOREIGN KEY (ProjectId) REFERENCES projects(Id),
     FOREIGN KEY (ParkingSystemId) REFERENCES parking_system(Id),
     FOREIGN KEY (CarId) REFERENCES cars(Id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+------------------------------------------------------------
+-- ERROR LOGS (PLC error log mirror; PlcLogId = external PLC log id)
+------------------------------------------------------------
+CREATE TABLE error_logs (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    PlcLogId INT NOT NULL,
+    Type VARCHAR(255) NOT NULL DEFAULT '',
+    LogKey VARCHAR(255) NOT NULL,
+    LogValue TEXT NOT NULL,
+    CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_error_logs_plclogid (PlcLogId)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+------------------------------------------------------------
+-- SYSTEM LOGS (PLC system log mirror; PlcLogId = external PLC log id)
+------------------------------------------------------------
+CREATE TABLE system_logs (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    PlcLogId INT NOT NULL,
+    Type VARCHAR(255) NOT NULL DEFAULT '',
+    LogKey VARCHAR(255) NOT NULL,
+    LogValue TEXT NOT NULL,
+    CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_system_logs_plclogid (PlcLogId)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

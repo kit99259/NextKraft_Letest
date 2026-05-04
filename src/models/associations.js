@@ -8,6 +8,8 @@ const PalletAllotment = require('./PalletAllotment');
 const RequestQueue = require('./RequestQueue');
 const Request = require('./Request');
 const ParkingRequest = require('./ParkingRequest');
+const ErrorLog = require('./ErrorLog');
+const SystemLog = require('./SystemLog');
 
 // User associations
 User.hasMany(Customer, { foreignKey: 'UserId', as: 'customers' });
@@ -94,6 +96,8 @@ module.exports = {
   PalletAllotment,
   RequestQueue,
   Request,
-  ParkingRequest
+  ParkingRequest,
+  ErrorLog,
+  SystemLog
 };
 

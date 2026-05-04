@@ -1,4 +1,5 @@
 const { body, validationResult } = require('express-validator');
+const { CAR_TYPE_VALUES } = require('../utils/constant');
 
 // Validation result handler
 const handleValidationErrors = (req, res, next) => {
@@ -18,8 +19,8 @@ const validateCreateCar = [
   body('carType')
     .optional()
     .trim()
-    .isLength({ max: 50 })
-    .withMessage('Car type must not exceed 50 characters'),
+    .isIn(CAR_TYPE_VALUES)
+    .withMessage(`Car type must be one of: ${CAR_TYPE_VALUES.join(', ')}`),
   
   body('carModel')
     .optional()

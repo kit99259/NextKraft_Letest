@@ -1,4 +1,5 @@
 const { body, validationResult } = require('express-validator');
+const { CAR_TYPE_VALUES } = require('../utils/constant');
 
 // Validation result handler
 const handleValidationErrors = (req, res, next) => {
@@ -71,11 +72,15 @@ const validateUpdateRequestStatus = [
 
 // Call empty pallet validation rules
 const validateCallEmptyPallet = [
+  body('carType')
+    .optional()
+    .isIn([...CAR_TYPE_VALUES])
+    .withMessage(`Car type must be one of: ${CAR_TYPE_VALUES.join(', ')}`),
   body('customerId')
     .optional()
     .isInt({ min: 1 })
     .withMessage('Customer ID must be a valid integer'),
-  
+
   handleValidationErrors
 ];
 

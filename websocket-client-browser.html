@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebSocket Client - NextKraft API</title>
     <!-- Socket.IO Client Library -->
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.socket.io/4.8.3/socket.io.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -174,17 +174,38 @@
         }
 
         function connect() {
-            const serverUrl = document.getElementById('serverUrl').value;
-            const jwtToken = document.getElementById('jwtToken').value;
+            const serverUrl = document.getElementById('serverUrl').value.trim();
+            const jwtToken = document.getElementById('jwtToken').value.trim();
+
+            if (!serverUrl) {
+                alert('Please enter a server URL');
+                return;
+            }
 
             if (!jwtToken) {
                 alert('Please enter a JWT token');
                 return;
             }
 
+            // Validate URL format
+            try {
+                new URL(serverUrl);
+            } catch (e) {
+                alert('Invalid server URL format. Please use http:// or https://');
+                log('Invalid URL format: ' + serverUrl, 'error');
+                return;
+            }
+
             if (socket && socket.connected) {
                 log('Already connected', 'warning');
                 return;
+            }
+
+            // Disconnect existing socket if any
+            if (socket) {
+                socket.removeAllListeners();
+                socket.disconnect();
+                socket = null;
             }
 
             updateStatus('connecting', 'Connecting...');
@@ -199,7 +220,16 @@
                 reconnectionDelay: 1000,
                 reconnectionDelayMax: 5000,
                 reconnectionAttempts: 5,
-                timeout: 20000
+                timeout: 20000,
+                forceNew: true // Force a new connection
+            });
+
+            // Log connection attempt details
+            console.log('Socket.IO connection attempt:', {
+                url: serverUrl,
+                hasToken: !!jwtToken,
+                tokenLength: jwtToken.length,
+                transports: ['websocket', 'polling']
             });
 
             // Connection events
@@ -215,8 +245,15 @@
             });
 
             socket.on('connect_error', (error) => {
-                log('❌ Connection error: ' + error.message, 'error');
-                updateStatus('disconnected', 'Connection Error');
+                console.error('Socket.IO connection error:', error);
+                log('❌ Connection error: ' + error.message, 'error', {
+                    message: error.message,
+                    type: error.type,
+                    description: error.description,
+                    context: error.context,
+                    data: error.data
+                });
+                updateStatus('disconnected', 'Connection Error: ' + error.message);
                 updateButtons(false);
             });
 
@@ -234,6 +271,16 @@
                 log(`✅ Reconnected after ${attemptNumber} attempts`, 'success');
                 updateStatus('connected', 'Reconnected');
                 updateButtons(true);
+            });
+
+            socket.on('reconnect_error', (error) => {
+                log(`❌ Reconnection error: ${error.message}`, 'error', error);
+            });
+
+            socket.on('reconnect_failed', () => {
+                log('❌ Reconnection failed after all attempts', 'error');
+                updateStatus('disconnected', 'Reconnection Failed');
+                updateButtons(false);
             });
 
             // Keep-alive
@@ -316,5 +363,8 @@
     </script>
 </body>
 </html>
+
+
+
 
 

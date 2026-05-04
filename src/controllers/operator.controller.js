@@ -1,4 +1,5 @@
 const operatorService = require('../services/operator.service');
+const parkingSyncService = require('../services/parkingSync.service');
 const { successResponse, errorResponse } = require('../utils');
 
 // Create Operator Controller
@@ -219,9 +220,9 @@ const updateCustomerStatus = async (req, res) => {
 const callEmptyPallet = async (req, res) => {
   try {
     const operatorUserId = req.user.id; // Get operator userId from authenticated session
-    const { customerId } = req.body; // Optional for Puzzle, required for Tower
-    
-    const result = await operatorService.callEmptyPallet(operatorUserId, customerId || null);
+    const { customerId, carType } = req.body;
+
+    const result = await operatorService.callEmptyPallet(operatorUserId, customerId || null, carType);
     
     return successResponse(res, result, 'Empty pallet called successfully');
   } catch (error) {
@@ -229,9 +230,10 @@ const callEmptyPallet = async (req, res) => {
     const statusCode = error.message === 'Operator profile not found' ? 404 :
                        error.message === 'Operator is not assigned to a parking system' ? 400 :
                        error.message === 'Customer ID is required for Puzzle parking system' ? 400 :
+                       error.message === 'Car type is required for Tower parking system' ? 400 :
                        error.message === 'Customer not found or does not belong to this parking system' ? 404 :
                        error.message === 'Customer does not have an assigned pallet' ? 404 :
-                       error.message === 'No empty pallet available in Tower parking system' ? 404 :
+                       error.message === 'No empty pallet available for this car type in Tower parking system' ? 404 :
                        error.message === 'Pallet location information is invalid' ? 400 :
                        error.message === 'Invalid parking system type' ? 400 : 500;
     return errorResponse(res, error.message || 'Failed to call empty pallet', statusCode);
@@ -354,6 +356,26 @@ const callPalletByCarNumber = async (req, res) => {
   }
 };
 
+// Parking Sync Controller
+const parkingSync = async (req, res) => {
+  try {
+    const operatorUserId = req.user.id;
+    const { carAllotHistory } = req.body;
+
+    const result = await parkingSyncService.processParkingSync(
+      operatorUserId,
+      carAllotHistory
+    );
+
+    return successResponse(res, result, 'Parking sync processed successfully');
+  } catch (error) {
+    console.error('Parking sync error:', error);
+    const statusCode = error.message === 'Operator profile not found' ? 404 :
+      error.message === 'Operator is not assigned to a project and parking system' ? 400 : 500;
+    return errorResponse(res, error.message || 'Failed to process parking sync', statusCode);
+  }
+};
+
 module.exports = {
   createOperator,
   getOperatorProfile,
@@ -370,6 +392,7 @@ module.exports = {
   releaseParkedCar,
   callSpecificPallet,
   callPalletAndCreateRequest,
-  callPalletByCarNumber
+  callPalletByCarNumber,
+  parkingSync
 };
 

@@ -723,6 +723,7 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
   await pallet.update({
     UserId: customer.UserId,
     CarId: car.Id,
+    CarType: car.CarType || null,
     Status: 'Assigned',
     UpdatedAt: istTime
   });
@@ -1173,6 +1174,7 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
       await pallet.update({
         UserId: 0,
         CarId: null,
+        CarType: null,
         Status: 'Released',
         UpdatedAt: istTime
       });
@@ -1569,7 +1571,7 @@ const updateCustomerStatus = async (operatorUserId, customerId, status) => {
 };
 
 // Call Empty Pallet Service
-const callEmptyPallet = async (operatorUserId, customerId = null) => {
+const callEmptyPallet = async (operatorUserId, customerId = null, carType) => {
   // Step 1: Find operator by userId
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId },
@@ -1597,13 +1599,18 @@ const callEmptyPallet = async (operatorUserId, customerId = null) => {
 
   // Step 3: Handle based on parking system type
   if (parkingSystem.Type === 'Tower') {
-    // For Tower: Find lowest empty pallet (UserId = 0 and CarId IS NULL)
+    // For Tower: Find lowest empty pallet for this car type (UserId = 0, CarId IS NULL, Released).
+    // Pallet CarType null = generic slot; otherwise must match requested carType.
+    if (!carType) {
+      throw new Error('Car type is required for Tower parking system');
+    }
     pallet = await PalletAllotment.findOne({
       where: {
         ParkingSystemId: parkingSystem.Id,
         UserId: 0,
         CarId: null,
-        Status: 'Released'
+        Status: 'Released',
+        [Op.or]: [{ CarType: null }, { CarType: carType }]
       },
       order: [
         ['Level', 'ASC'],
@@ -1612,7 +1619,7 @@ const callEmptyPallet = async (operatorUserId, customerId = null) => {
     });
 
     if (!pallet) {
-      throw new Error('No empty pallet available in Tower parking system');
+      throw new Error('No empty pallet available for this car type in Tower parking system');
     }
 
     // Calculate time: (Level * TimePerLevel) + BufferTime
@@ -1718,6 +1725,7 @@ const callEmptyPallet = async (operatorUserId, customerId = null) => {
   return {
     palletId: pallet.Id,
     palletNumber: pallet.UserGivenPalletNumber,
+    carType: pallet.CarType,
     level: pallet.Level,
     levelBelowGround: pallet.LevelBelowGround,
     column: pallet.Column,
@@ -2144,6 +2152,7 @@ const releaseParkedCar = async (operatorUserId, palletId) => {
   await pallet.update({
     UserId: 0,
     CarId: null,
+    CarType: null,
     Status: 'Released',
     UpdatedAt: istTime
   });

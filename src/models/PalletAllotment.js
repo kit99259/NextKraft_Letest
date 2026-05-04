@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
+const { CAR_TYPE_VALUES } = require('../utils/constant');
 
 const PalletAllotment = sequelize.define('PalletAllotment', {
   Id: {
@@ -53,6 +54,11 @@ const PalletAllotment = sequelize.define('PalletAllotment', {
       model: 'cars',
       key: 'Id'
     }
+  },
+  CarType: {
+    type: DataTypes.ENUM(...CAR_TYPE_VALUES),
+    allowNull: true,
+    defaultValue: null
   },
   Status: {
     type: DataTypes.ENUM('Assigned', 'Released'),

@@ -17,6 +17,8 @@ const authRoutes = require('./routes/auth.routes');
 const customerRoutes = require('./routes/customer.routes');
 const operatorRoutes = require('./routes/operator.routes');
 const adminRoutes = require('./routes/admin.routes');
+const errorLogRoutes = require('./routes/errorLog.routes');
+const systemLogRoutes = require('./routes/systemLog.routes');
 
 const app = express();
 const server = http.createServer(app);
@@ -75,6 +77,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/customer', customerRoutes);
 app.use('/api/operator', operatorRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/error-logs', errorLogRoutes);
+app.use('/api/system-logs', systemLogRoutes);
 
 // 404 handler
 app.use((req, res) => {
