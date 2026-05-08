@@ -17,7 +17,7 @@ const { validateBulkAddLogs, validateBulkUpdateLogs } = require('../validators/p
  *     summary: Bulk add or upsert error logs by PLC log id
  *     description: |
  *       Each item uses `id` as the external PLC log id (stored as plclogId), or you may send `plclogId` instead.
- *       On duplicate PLC log id, type, key, and value are updated.
+ *       On duplicate PLC log id, type, key, value, and message are updated.
  *     tags: [ErrorLogs]
  *     security: []
  *     requestBody:
@@ -45,6 +45,9 @@ const { validateBulkAddLogs, validateBulkUpdateLogs } = require('../validators/p
  *                       type: string
  *                     value:
  *                       type: string
+ *                     message:
+ *                       type: string
+ *                       description: Human-readable error message
  *                     createdAt:
  *                       type: string
  *                       format: date-time
@@ -90,6 +93,9 @@ router.post('/bulk', validateBulkAddLogs, plcLogController.bulkAddErrorLogs);
  *                       type: string
  *                     value:
  *                       type: string
+ *                     message:
+ *                       type: string
+ *                       description: Human-readable error message
  *                     plclogId:
  *                       type: integer
  *     responses:
@@ -130,6 +136,9 @@ router.put('/bulk', validateBulkUpdateLogs, plcLogController.bulkUpdateErrorLogs
  *         schema: { type: string }
  *       - in: query
  *         name: key
+ *         schema: { type: string }
+ *       - in: query
+ *         name: message
  *         schema: { type: string }
  *     responses:
  *       200:

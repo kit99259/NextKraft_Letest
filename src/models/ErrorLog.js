@@ -25,6 +25,11 @@ const ErrorLog = sequelize.define('ErrorLog', {
     type: DataTypes.TEXT,
     allowNull: false
   },
+  Message: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+    defaultValue: ''
+  },
   CreatedAt: {
     type: DataTypes.DATE,
     allowNull: false,

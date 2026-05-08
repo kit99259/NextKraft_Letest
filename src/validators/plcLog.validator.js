@@ -32,6 +32,9 @@ const validateBulkAddLogs = [
         if (item.value === undefined || item.value === null) {
           throw new Error(`logs[${i}]: value is required`);
         }
+        if (item.message !== undefined && item.message !== null && typeof item.message !== 'string') {
+          throw new Error(`logs[${i}]: message must be a string`);
+        }
       });
       return true;
     }),

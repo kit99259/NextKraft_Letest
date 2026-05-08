@@ -3,7 +3,7 @@ const { Op } = require('sequelize');
 const toRow = (row) => {
   if (!row) return null;
   const plain = row.get ? row.get({ plain: true }) : row;
-  return {
+  const mapped = {
     id: plain.Id,
     plclogId: plain.PlcLogId,
     type: plain.Type ?? '',
@@ -12,6 +12,10 @@ const toRow = (row) => {
     createdAt: plain.CreatedAt,
     updatedAt: plain.UpdatedAt
   };
+  if (Object.prototype.hasOwnProperty.call(plain, 'Message')) {
+    mapped.message = plain.Message != null ? String(plain.Message) : '';
+  }
+  return mapped;
 };
 
 const normalizePlcLogId = (item) => {
@@ -28,6 +32,9 @@ const mapBulkCreateRow = (item) => {
     LogKey: String(item.key),
     LogValue: String(item.value != null ? item.value : '')
   };
+  if (item.message !== undefined) {
+    row.Message = String(item.message != null ? item.message : '');
+  }
   if (item.createdAt) row.CreatedAt = new Date(item.createdAt);
   if (item.updatedAt) row.UpdatedAt = new Date(item.updatedAt);
   return row;
@@ -47,8 +54,16 @@ const bulkAddLogs = async (Model, items) => {
     }
   }
 
+  const updateOnDuplicate = ['Type', 'LogKey', 'LogValue', 'UpdatedAt'];
+  if (Model.rawAttributes?.Message) {
+    updateOnDuplicate.push('Message');
+    rows.forEach((r) => {
+      if (r.Message === undefined) r.Message = '';
+    });
+  }
+
   await Model.bulkCreate(rows, {
-    updateOnDuplicate: ['Type', 'LogKey', 'LogValue', 'UpdatedAt']
+    updateOnDuplicate
   });
 
   const plcIds = rows.map((r) => r.PlcLogId);
@@ -79,6 +94,9 @@ const bulkUpdateLogs = async (Model, items) => {
       if (item.type !== undefined) existing.Type = item.type != null ? String(item.type) : '';
       if (item.key !== undefined) existing.LogKey = String(item.key);
       if (item.value !== undefined) existing.LogValue = String(item.value != null ? item.value : '');
+      if (item.message !== undefined && Object.prototype.hasOwnProperty.call(existing.dataValues, 'Message')) {
+        existing.Message = String(item.message != null ? item.message : '');
+      }
       if (item.plclogId !== undefined) {
         const pid = parseInt(item.plclogId, 10);
         if (!Number.isFinite(pid) || pid < 1) {
@@ -137,6 +155,9 @@ const getLogs = async (Model, query) => {
   }
   if (query.key != null && query.key !== '') {
     where.LogKey = String(query.key);
+  }
+  if (query.message != null && query.message !== '' && Model.rawAttributes?.Message) {
+    where.Message = String(query.message);
   }
 
   const { rows, count } = await Model.findAndCountAll({
