@@ -359,8 +359,8 @@ const getOperatorProjectWithParkingSystems = async (userId) => {
   };
 };
 
-// Assign Pallet to Customer Service
-const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId = null, carNumber = null) => {
+// Car in — parking request → Accepted; resolve pallet by floor + column; ETA from that pallet. Assignment in parkCar only.
+const carIn = async (operatorUserId, floor, floorColumn, parkingRequestId = null, carNumber = null) => {
   // Step 1: Validate operator exists and get operator details
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId }
@@ -622,8 +622,17 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
     throw new Error('Parking system not found');
   }
 
-  // Step 9: Find the pallet
-  const pallet = await PalletAllotment.findByPk(palletId, {
+  // Step 9: Find pallet by floor + column (operator's parking system). Above ground: Level + Column. Below ground (Puzzle): LevelBelowGround + Column (Level IS NULL).
+  const pallet = await PalletAllotment.findOne({
+    where: {
+      ParkingSystemId: operator.ParkingSystemId,
+      ProjectId: operator.ProjectId,
+      Column: floorColumn,
+      [Op.or]: [
+        { Level: floor, LevelBelowGround: { [Op.is]: null } },
+        { LevelBelowGround: floor, Level: { [Op.is]: null } }
+      ]
+    },
     include: [
       {
         model: Project,
@@ -639,8 +648,10 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
   });
 
   if (!pallet) {
-    throw new Error('Pallet not found');
+    throw new Error('No pallet found for this floor and column');
   }
+
+  const palletId = pallet.Id;
 
   // Step 10: Validate pallet belongs to operator's parking system
   if (pallet.ParkingSystemId !== operator.ParkingSystemId) {
@@ -718,38 +729,100 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
     throw new Error('Car is already assigned to another pallet');
   }
 
-  // Step 15: Update pallet with customer and car information
   const istTime = getISTTime();
 
-  await pallet.update({
-    UserId: customer.UserId,
-    CarId: car.Id,
-    CarType: car.CarType || null,
-    Status: 'Assigned',
-    UpdatedAt: istTime
-  });
-
-  // Step 15.1: Mark the specific parking request as completed
   await parkingRequest.update({
     Status: 'Accepted',
     UpdatedAt: istTime
   });
 
-  // Step 11: Reload pallet with associations
-  await pallet.reload({
+  const carInfo = car
+    ? [car.CarCompany, car.CarModel, car.CarNumber].filter(Boolean).join(' ') || 'your car'
+    : 'your car';
+  const palletInfo = pallet.UserGivenPalletNumber || `Level ${pallet.Level}, Column ${pallet.Column}`;
+
+  if (customer && customer.user) {
+    await notificationService.sendNotificationToUser(
+      customer.UserId,
+      'Parking Request Accepted',
+      `Your parking request has been accepted. Pallet ${palletInfo} is being moved to parking level with car ${carInfo}. Estimated time: ${timeToParkingFormatted}.`,
+      {
+        type: 'parking_request_accepted',
+        requestId: parkingRequest.Id,
+        palletId: palletId,
+        carId: car.Id,
+        status: 'Accepted',
+        estimatedTime: timeToParking,
+        estimatedTimeFormatted: timeToParkingFormatted
+      }
+    );
+
+    await websocketService.emitToUser(customer.UserId, 'parking_request_accepted', {
+      palletId: palletId.toString(),
+      customerId: customer.Id.toString(),
+      carId: car.Id.toString(),
+      status: 'Accepted',
+      parkingRequestId: parkingRequest.Id.toString(),
+      estimatedTime: timeToParking,
+      estimatedTimeFormatted: timeToParkingFormatted
+    });
+  }
+
+  return {
+    parkingRequestId: parkingRequest.Id,
+    palletId
+  };
+};
+
+// Assign pallet (UserId + Assigned; no CarId/CarType here), complete parking request, notify pallet_assigned.
+const parkCar = async (operatorUserId, parkingRequestId, palletId) => {
+  const operator = await Operator.findOne({
+    where: { UserId: operatorUserId }
+  });
+
+  if (!operator) {
+    throw new Error('Operator profile not found');
+  }
+
+  if (!operator.ParkingSystemId || !operator.ProjectId) {
+    throw new Error('Operator is not assigned to a project and parking system');
+  }
+
+  const parkingRequest = await ParkingRequest.findOne({
+    where: {
+      Id: parkingRequestId,
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId
+    },
     include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      },
       {
         model: Car,
         as: 'car',
-        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber'],
-        include: [
-          {
-            model: User,
-            as: 'user',
-            attributes: ['Id', 'Username']
-          }
-        ]
-      },
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+      }
+    ]
+  });
+
+  if (!parkingRequest) {
+    throw new Error('Parking request not found or does not belong to your parking system');
+  }
+
+  if (parkingRequest.Status !== 'Accepted') {
+    throw new Error(`Cannot park car for parking request with status: ${parkingRequest.Status}. Expected Accepted.`);
+  }
+
+  const car = parkingRequest.car;
+  if (!car) {
+    throw new Error('Car not found in parking request');
+  }
+
+  const pallet = await PalletAllotment.findByPk(palletId, {
+    include: [
       {
         model: Project,
         as: 'project',
@@ -763,175 +836,105 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
     ]
   });
 
-  // Send notification to customer when pallet is moving to parking
+  if (!pallet) {
+    throw new Error('Pallet not found');
+  }
+
+  if (pallet.ParkingSystemId !== operator.ParkingSystemId) {
+    throw new Error('Pallet does not belong to your parking system');
+  }
+
+  if (pallet.Status === 'Assigned' && pallet.UserId !== 0) {
+    throw new Error('Pallet is already assigned to another customer');
+  }
+
+  if (operator.ProjectId !== pallet.ProjectId) {
+    throw new Error('Operator does not have access to this project');
+  }
+
+  const existingPalletAssignment = await PalletAllotment.findOne({
+    where: {
+      CarId: car.Id,
+      Status: 'Assigned',
+      Id: { [Op.ne]: palletId }
+    }
+  });
+
+  if (existingPalletAssignment) {
+    throw new Error('Car is already assigned to another pallet');
+  }
+
+  const customer = await Customer.findOne({
+    where: {
+      UserId: parkingRequest.UserId,
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId
+    },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      }
+    ]
+  });
+
+  const istTime = getISTTime();
+
+  await pallet.update({
+    UserId: parkingRequest.UserId,
+    Status: 'Assigned',
+    UpdatedAt: istTime
+  });
+
+  await parkingRequest.update({
+    Status: 'Completed',
+    UpdatedAt: istTime
+  });
+
+  const updatedPallet = await PalletAllotment.findByPk(pallet.Id, {
+    include: [
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+      }
+    ]
+  });
+
   if (customer && customer.user) {
-    const palletInfo = pallet.UserGivenPalletNumber || `Level ${pallet.Level}, Column ${pallet.Column}`;
-    const carInfo = pallet.car ? `${pallet.car.CarCompany} ${pallet.car.CarModel} (${pallet.car.CarNumber})` : 'your car';
-    
+    const palletInfo = updatedPallet.UserGivenPalletNumber || `Level ${updatedPallet.Level}, Column ${updatedPallet.Column}`;
+    const carForMsg = parkingRequest.car;
+    const carInfo = carForMsg
+      ? [carForMsg.CarCompany, carForMsg.CarModel, carForMsg.CarNumber].filter(Boolean).join(' ') || 'your car'
+      : 'your car';
+
     await notificationService.sendNotificationToUser(
       customer.UserId,
-      'Parking Request Accepted',
-      `Your parking request has been accepted. Pallet ${ palletInfo } is being moved to parking level with car ${ carInfo }. Estimated time: ${timeToParkingFormatted}.`,
+      'Pallet Assigned',
+      `A pallet (${palletInfo}) has been assigned to you for ${carInfo}`,
       {
-        type: 'parking_request_accepted',
-        requestId: parkingRequest.Id,
-        palletId: palletId,
-        carId: car.Id,
-        status: parkingRequest.Status,
-        estimatedTime: timeToParking,
-        estimatedTimeFormatted: timeToParkingFormatted
+        type: 'pallet_assigned',
+        palletId: pallet.Id.toString(),
+        customerId: customer.Id.toString(),
+        carId: car.Id.toString(),
+        parkingRequestId: parkingRequest.Id.toString()
       }
     );
 
-    // Emit WebSocket event to all customer
-    
-    await websocketService.emitToUser(customer.UserId, 'parking_request_accepted', {
-      palletId: palletId.toString(),
+    await websocketService.emitToUser(customer.UserId, 'pallet_assigned', {
+      palletId: pallet.Id.toString(),
       customerId: customer.Id.toString(),
-      carId: car ? car.Id.toString() : null,
-      status: pallet.Status,
-      parkingRequestId: parkingRequestId !== null ? parkingRequestId.toString() : null,
-      estimatedTime: timeToParking,
-      estimatedTimeFormatted: timeToParkingFormatted
+      carId: car.Id.toString(),
+      status: updatedPallet.Status,
+      parkingRequestId: parkingRequest.Id.toString()
     });
   }
 
-  // Store variables for delayed task
-  const delayedParkingRequestId = parkingRequest.Id;
-  const delayedCustomer = customer;
-  const delayedPalletId = palletId;
-  const delayedCar = car;
-  const delayedTimeToParking = timeToParking;
-
-  // Set up delayed task to complete parking request and send notification
-  setTimeout(async () => {
-    try {
-      // Reload pallet to get fresh data
-      const updatedPallet = await PalletAllotment.findByPk(delayedPalletId, {
-        include: [
-          {
-            model: Car,
-            as: 'car',
-            attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
-          },
-          {
-            model: Project,
-            as: 'project',
-            attributes: ['Id', 'ProjectName', 'SocietyName']
-          },
-          {
-            model: ParkingSystem,
-            as: 'parkingSystem',
-            attributes: ['Id', 'WingName', 'Type', 'Level', 'Column']
-          }
-        ]
-      });
-
-      if (!updatedPallet) {
-        console.error(`Pallet ${delayedPalletId} not found for delayed completion`);
-        return;
-      }
-
-      // Update parking request status to Completed
-      const istTime = getISTTime();
-      await ParkingRequest.update(
-        {
-          Status: 'Completed',
-          UpdatedAt: istTime
-        },
-        {
-          where: {
-            Id: delayedParkingRequestId
-          }
-        }
-      );
-
-      // Send notification to customer when pallet is assigned
-      if (delayedCustomer && delayedCustomer.user) {
-        const palletInfo = updatedPallet.UserGivenPalletNumber || `Level ${updatedPallet.Level}, Column ${updatedPallet.Column}`;
-        const carInfo = updatedPallet.car ? `${updatedPallet.car.CarCompany} ${updatedPallet.car.CarModel} (${updatedPallet.car.CarNumber})` : 'your car';
-        
-        await notificationService.sendNotificationToUser(
-          delayedCustomer.UserId,
-          'Pallet Assigned',
-          `A pallet (${palletInfo}) has been assigned to you for ${carInfo}`,
-          {
-            type: 'pallet_assigned',
-            palletId: delayedPalletId.toString(),
-            customerId: delayedCustomer.Id.toString(),
-            carId: delayedCar ? delayedCar.Id.toString() : null,
-            parkingRequestId: delayedParkingRequestId !== null ? delayedParkingRequestId.toString() : null
-          }
-        );
-
-        // Emit WebSocket event to all customer
-        
-        await websocketService.emitToUser(delayedCustomer.UserId, 'pallet_assigned', {
-          palletId: delayedPalletId.toString(),
-          customerId: delayedCustomer.Id.toString(),
-          carId: delayedCar ? delayedCar.Id.toString() : null,
-          status: updatedPallet.Status,
-          parkingRequestId: delayedParkingRequestId !== null ? delayedParkingRequestId.toString() : null
-        });
-      }
-    } catch (error) {
-      console.error('Error in delayed parking request completion:', error);
-    }
-  }, delayedTimeToParking * 1000); // Convert seconds to milliseconds
-
   return {
-    pallet: {
-      id: pallet.Id,
-      userId: pallet.UserId,
-      projectId: pallet.ProjectId,
-      parkingSystemId: pallet.ParkingSystemId,
-      level: pallet.Level,
-      levelBelowGround: pallet.LevelBelowGround,
-      column: pallet.Column,
-      userGivenPalletNumber: pallet.UserGivenPalletNumber,
-      carId: pallet.CarId,
-      car: pallet.car ? {
-        id: pallet.car.Id,
-        carType: pallet.car.CarType,
-        carModel: pallet.car.CarModel,
-        carCompany: pallet.car.CarCompany,
-        carNumber: pallet.car.CarNumber,
-        user: pallet.car.user ? {
-          id: pallet.car.user.Id,
-          username: pallet.car.user.Username
-        } : null
-      } : null,
-      status: pallet.Status,
-      createdAt: pallet.CreatedAt,
-      updatedAt: pallet.UpdatedAt
-    },
-    timeToParking: timeToParking,
-    timeToParkingFormatted: formatTime(timeToParking),
-    customer: {
-      id: customer.Id,
-      userId: customer.UserId,
-      firstName: customer.FirstName,
-      lastName: customer.LastName,
-      email: customer.Email,
-      mobileNumber: customer.MobileNumber,
-      projectId: customer.ProjectId,
-      parkingSystemId: customer.ParkingSystemId,
-      flatNumber: customer.FlatNumber,
-      profession: customer.Profession,
-      status: customer.Status
-    },
-    project: {
-      id: pallet.project.Id,
-      projectName: pallet.project.ProjectName,
-      societyName: pallet.project.SocietyName
-    },
-    parkingSystem: {
-      id: pallet.parkingSystem.Id,
-      wingName: pallet.parkingSystem.WingName,
-      type: pallet.parkingSystem.Type,
-      level: pallet.parkingSystem.Level,
-      column: pallet.parkingSystem.Column
-    }
+    parkingRequestId: parkingRequest.Id,
+    palletId: pallet.Id,
+    status: 'Completed'
   };
 };
 
@@ -2667,7 +2670,8 @@ module.exports = {
   getOperatorProfile,
   getOperatorList,
   getOperatorProjectWithParkingSystems,
-  assignPalletToCustomer,
+  carIn,
+  parkCar,
   getOperatorRequests,
   updateRequestStatus,
   updateOperatorPalletPower,

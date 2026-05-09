@@ -75,24 +75,26 @@ const getOperatorProjectWithParkingSystems = async (req, res) => {
   }
 };
 
-// Assign Pallet to Customer Controller
-const assignPalletToCustomer = async (req, res) => {
+// Car in (associate slot / parking request accepted)
+const carIn = async (req, res) => {
   try {
-    const { palletId, parkingRequestId, carNumber } = req.body;
-    const operatorUserId = req.user.id; // Get operator userId from authenticated session
-    
-    const result = await operatorService.assignPalletToCustomer(
+    const { floor, floorColumn, parkingRequestId, carNumber } = req.body;
+    const operatorUserId = req.user.id;
+
+    const result = await operatorService.carIn(
       operatorUserId,
-      parseInt(palletId),
-      parkingRequestId ? parseInt(parkingRequestId) : null,
+      parseInt(floor, 10),
+      parseInt(floorColumn, 10),
+      parkingRequestId ? parseInt(parkingRequestId, 10) : null,
       carNumber || null
     );
-    
-    return successResponse(res, result, 'Pallet assigned to customer successfully');
+
+    return successResponse(res, result, 'Car in recorded successfully');
   } catch (error) {
-    console.error('Assign pallet error:', error);
+    console.error('Car in error:', error);
     const statusCode = error.message === 'Operator profile not found' ||
                        error.message === 'Pallet not found' ||
+                       error.message === 'No pallet found for this floor and column' ||
                        error.message === 'Parking request not found or does not belong to your parking system' ||
                        error.message === 'Customer not found for this parking request' ||
                        error.message === 'Customer not found for this car' ||
@@ -105,7 +107,33 @@ const assignPalletToCustomer = async (req, res) => {
                        error.message === 'Operator does not have access to this project' ||
                        error.message === 'Either parkingRequestId or carNumber must be provided' ||
                        error.message.includes('Cannot assign pallet to a parking request with status') ? 400 : 500;
-    return errorResponse(res, error.message || 'Failed to assign pallet to customer', statusCode);
+    return errorResponse(res, error.message || 'Failed to record car in', statusCode);
+  }
+};
+
+const parkCar = async (req, res) => {
+  try {
+    const { parkingRequestId, palletId } = req.body;
+    const result = await operatorService.parkCar(
+      req.user.id,
+      parseInt(parkingRequestId),
+      parseInt(palletId)
+    );
+
+    return successResponse(res, result, 'Car parked successfully');
+  } catch (error) {
+    console.error('Park car error:', error);
+    const statusCode = error.message === 'Operator profile not found' ||
+                       error.message === 'Parking request not found or does not belong to your parking system' ||
+                       error.message === 'Car not found in parking request' ||
+                       error.message === 'Pallet not found' ? 404 :
+                       error.message === 'Operator is not assigned to a project and parking system' ||
+                       error.message === 'Pallet does not belong to your parking system' ||
+                       error.message === 'Operator does not have access to this project' ||
+                       error.message === 'Pallet is already assigned to another customer' ||
+                       error.message === 'Car is already assigned to another pallet' ||
+                       error.message.includes('Cannot park car for parking request with status') ? 400 : 500;
+    return errorResponse(res, error.message || 'Failed to park car', statusCode);
   }
 };
 
@@ -381,7 +409,8 @@ module.exports = {
   getOperatorProfile,
   getOperatorList,
   getOperatorProjectWithParkingSystems,
-  assignPalletToCustomer,
+  carIn,
+  parkCar,
   getOperatorRequests,
   updateRequestStatus,
   updateOperatorPalletPower,

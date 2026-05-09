@@ -15,14 +15,19 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
-// Assign pallet to customer validation rules
-const validateAssignPallet = [
-  body('palletId')
+// Car in — locate pallet by floor + column within operator parking system
+const validateCarIn = [
+  body('floor')
     .notEmpty()
-    .withMessage('Pallet ID is required')
+    .withMessage('Floor is required')
     .isInt({ min: 1 })
-    .withMessage('Pallet ID must be a valid integer'),
-  
+    .withMessage('Floor must be a positive integer'),
+  body('floorColumn')
+    .notEmpty()
+    .withMessage('Floor column is required')
+    .isInt({ min: 1 })
+    .withMessage('Floor column must be a positive integer'),
+
   body('parkingRequestId')
     .optional()
     .isInt({ min: 1 })
@@ -46,6 +51,24 @@ const validateAssignPallet = [
     return true;
   }),
   
+  handleValidationErrors
+];
+
+const validateAssignPallet = validateCarIn;
+
+// Park car — assign pallet slot then complete parking request
+const validateParkCar = [
+  body('parkingRequestId')
+    .notEmpty()
+    .withMessage('Parking request ID is required')
+    .isInt({ min: 1 })
+    .withMessage('Parking Request ID must be a valid integer'),
+  body('palletId')
+    .notEmpty()
+    .withMessage('Pallet ID is required')
+    .isInt({ min: 1 })
+    .withMessage('Pallet ID must be a valid integer'),
+
   handleValidationErrors
 ];
 
@@ -149,7 +172,9 @@ const validateCallPalletByCarNumber = [
 ];
 
 module.exports = {
+  validateCarIn,
   validateAssignPallet,
+  validateParkCar,
   validateRequestCarRelease,
   validateUpdateRequestStatus,
   validateCallEmptyPallet,

@@ -5,7 +5,7 @@ const operatorController = require('../controllers/operator.controller');
 const parkingSystemController = require('../controllers/parkingSystem.controller');
 const parkingRequestController = require('../controllers/parkingRequest.controller');
 const { validateCreateOperator } = require('../validators/operator.validator');
-const { validateAssignPallet, validateUpdateRequestStatus, validateCallEmptyPallet, validateUpdateParkingSystemStatus, validateReleaseParkedCar, validateCallSpecificPallet, validateCallPalletAndCreateRequest, validateCallPalletByCarNumber } = require('../validators/pallet.validator');
+const { validateCarIn, validateParkCar, validateUpdateRequestStatus, validateCallEmptyPallet, validateUpdateParkingSystemStatus, validateReleaseParkedCar, validateCallSpecificPallet, validateCallPalletAndCreateRequest, validateCallPalletByCarNumber } = require('../validators/pallet.validator');
 const { validateParkingSync } = require('../validators/parkingSync.validator');
 
 // All routes require authentication
@@ -845,18 +845,13 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
 
 /**
  * @swagger
- * /api/operator/assign-pallet:
+ * /api/operator/car-in:
  *   post:
- *     summary: Assign a pallet to a customer (Operator only)
+ *     summary: Car in (Operator only)
  *     description: |
- *       Assigns a pallet to a customer. Two scenarios are supported:
- *       1. If parkingRequestId is provided: Follows the standard flow using existing parking request.
- *       2. If carNumber is provided (and parkingRequestId is null): 
- *          - Checks if car exists. If not, creates user (username: "erhtghgkdgdutng534653"), dummy customer, and car.
- *          - If car exists, uses existing user and customer.
- *          - Checks if parking request exists (not completed/cancelled). If not, creates new parking request.
- *          - Then follows the same assignment flow.
- *       The pallet must be released, the customer must be approved, and the parking request must be in Pending or Accepted status.
+ *       Accepts the parking request (Accepted). Does not assign PalletDetails — assignment happens in POST /api/operator/park-car.
+ *       Pallet is resolved by floor + floorColumn within the operator's parking system (Level/Column above ground, or LevelBelowGround/Column below ground).
+ *       Either parkingRequestId or carNumber (same rules as before).
  *     tags: [Operator]
  *     security:
  *       - bearerAuth: []
@@ -867,25 +862,25 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  *           schema:
  *             type: object
  *             required:
- *               - palletId
+ *               - floor
+ *               - floorColumn
  *             properties:
- *               palletId:
+ *               floor:
  *                 type: integer
  *                 minimum: 1
- *                 description: ID of the pallet to assign
- *                 example: 1
+ *                 description: Above ground matches Level; below ground (Puzzle) matches LevelBelowGround when Level is null
+ *               floorColumn:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: Column number for this parking system
  *               parkingRequestId:
  *                 type: integer
  *                 minimum: 1
- *                 description: ID of the parking request. Customer and car information will be retrieved from this request. Either parkingRequestId or carNumber must be provided.
- *                 example: 1
  *               carNumber:
  *                 type: string
- *                 description: Car number. If provided, will create user/customer/car if needed and create parking request. Either parkingRequestId or carNumber must be provided.
- *                 example: "ABC123456"
  *     responses:
  *       200:
- *         description: Pallet assigned to customer successfully
+ *         description: Returns parkingRequestId and resolved palletId
  *         content:
  *           application/json:
  *             schema:
@@ -898,124 +893,67 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  *                 data:
  *                   type: object
  *                   properties:
- *                     pallet:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: integer
- *                         userId:
- *                           type: integer
- *                         projectId:
- *                           type: integer
- *                         parkingSystemId:
- *                           type: integer
- *                         level:
- *                           type: integer
- *                           nullable: true
- *                         levelBelowGround:
- *                           type: integer
- *                           nullable: true
- *                         column:
- *                           type: integer
- *                         userGivenPalletNumber:
- *                           type: string
- *                         carId:
- *                           type: integer
- *                         car:
- *                           type: object
- *                           properties:
- *                             id:
- *                               type: integer
- *                             carType:
- *                               type: string
- *                             carModel:
- *                               type: string
- *                             carCompany:
- *                               type: string
- *                             carNumber:
- *                               type: string
- *                             user:
- *                               type: object
- *                               properties:
- *                                 id:
- *                                   type: integer
- *                                 username:
- *                                   type: string
- *                         status:
- *                           type: string
- *                           enum: [Assigned, Released]
- *                         createdAt:
- *                           type: string
- *                           format: date-time
- *                         updatedAt:
- *                           type: string
- *                           format: date-time
- *                     timeToParking:
+ *                     parkingRequestId:
  *                       type: integer
- *                       description: Time to move pallet to parking position in seconds
- *                     timeToParkingFormatted:
- *                       type: string
- *                       description: Time in human-readable format
- *                       example: "5 minutes 30 seconds"
- *                     customer:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: integer
- *                         userId:
- *                           type: integer
- *                         firstName:
- *                           type: string
- *                         lastName:
- *                           type: string
- *                         email:
- *                           type: string
- *                         mobileNumber:
- *                           type: string
- *                         projectId:
- *                           type: integer
- *                         parkingSystemId:
- *                           type: integer
- *                         flatNumber:
- *                           type: string
- *                         profession:
- *                           type: string
- *                         status:
- *                           type: string
- *                           enum: [Approved, Rejected, Pending]
- *                     project:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: integer
- *                         projectName:
- *                           type: string
- *                         societyName:
- *                           type: string
- *                     parkingSystem:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: integer
- *                         wingName:
- *                           type: string
- *                         type:
- *                           type: string
- *                           enum: [Tower, Puzzle]
- *                         level:
- *                           type: integer
- *                         column:
- *                           type: integer
+ *                     palletId:
+ *                       type: integer
  *       400:
- *         description: Validation error, pallet already assigned, car already assigned, customer not approved, parking request status invalid, or pallet does not belong to operator's parking system
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - Operator access required
+ *         description: Validation error
  *       404:
- *         description: Pallet, parking request, customer, or car not found
+ *         description: Not found
  */
-router.post('/assign-pallet', authorize('operator'), validateAssignPallet, operatorController.assignPalletToCustomer);
+router.post('/car-in', authorize('operator'), validateCarIn, operatorController.carIn);
+
+/**
+ * @swagger
+ * /api/operator/park-car:
+ *   post:
+ *     summary: Park car — assign pallet and complete parking request (Operator only)
+ *     description: |
+ *       Assigns the pallet slot (UserId + Assigned on PalletDetails; no CarId/CarType here).
+ *       Sets parking request to Completed and sends pallet_assigned notification/WebSocket.
+ *       Parking request must be Accepted (after car-in). Requires palletId for the slot being used.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - parkingRequestId
+ *               - palletId
+ *             properties:
+ *               parkingRequestId:
+ *                 type: integer
+ *                 minimum: 1
+ *               palletId:
+ *                 type: integer
+ *                 minimum: 1
+ *     responses:
+ *       200:
+ *         description: Parking completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     parkingRequestId:
+ *                       type: integer
+ *                     palletId:
+ *                       type: integer
+ *                     status:
+ *                       type: string
+ *                       example: Completed
+ */
+router.post('/park-car', authorize('operator'), validateParkCar, operatorController.parkCar);
 
 /**
  * @swagger
