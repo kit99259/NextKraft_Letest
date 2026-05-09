@@ -1,5 +1,6 @@
 const { body, validationResult } = require('express-validator');
 const { CAR_TYPE_VALUES } = require('../utils/constant');
+const { PARKING_SYSTEM_STATUS_VALUES } = require('../constants/parkingSystemStatus');
 
 // Validation result handler
 const handleValidationErrors = (req, res, next) => {
@@ -89,8 +90,8 @@ const validateUpdateParkingSystemStatus = [
   body('status')
     .notEmpty()
     .withMessage('Status is required')
-    .isIn(['AtGround', 'Idle'])
-    .withMessage('Status must be one of: AtGround, Idle'),
+    .isIn([...PARKING_SYSTEM_STATUS_VALUES])
+    .withMessage(`Status must be one of: ${PARKING_SYSTEM_STATUS_VALUES.join(', ')}`),
   
   handleValidationErrors
 ];

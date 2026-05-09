@@ -97,7 +97,11 @@ CREATE TABLE parking_system (
     TimeForEachLevel INT DEFAULT 0,  -- seconds
     TimeForHorizontalMove INT DEFAULT 0, -- seconds
     
-    Status ENUM('Idle', 'PalletMovingToGround', 'PalletMovingToParking', 'AtGround') DEFAULT 'Idle',
+    Status ENUM(
+        'Idle', 'LiftUp', 'LiftDown', 'LeftTaking', 'LeftLeaving',
+        'RightTaking', 'RightLeaving', 'TT_0_180', 'TT_180_0',
+        'DoorOpen', 'DoorClose'
+    ) DEFAULT 'Idle',
     
     CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

@@ -1494,8 +1494,8 @@ router.post('/call-empty-pallet', authorize('operator'), validateCallEmptyPallet
  *     description: |
  *       Calls a specific pallet by palletId and accepts the associated request (changes status to 'Accepted').
  *       Calculates the time it will take to move the pallet to ground level (same calculation as callEmptyPallet).
- *       Updates parking system status to 'PalletMovingToGround'.
  *       Sends notification to the customer.
+ *       To update persisted parking system status (and notify customers via WebSocket), use PUT /api/operator/parking-system/status.
  *     tags: [Operator]
  *     security:
  *       - bearerAuth: []
@@ -1604,8 +1604,8 @@ router.post('/call-specific-pallet', authorize('operator'), validateCallSpecific
  *       - Create a new release request with status 'Pending'
  *       - Immediately update request status to 'Accepted'
  *       - Calculate time to move pallet to ground level
- *       - Update parking system status to 'PalletMovingToGround'
  *       - Send notification to customer with estimated time
+ *       Parking system status is updated only via PUT /api/operator/parking-system/status.
  *     tags: [Operator]
  *     security:
  *       - bearerAuth: []
@@ -1740,8 +1740,8 @@ router.post('/call-pallet-create-request', authorize('operator'), validateCallPa
  *       - Check if a request already exists (if yes, throws error)
  *       - Create a new release request with status 'Pending'
  *       - Calculate time to move pallet to ground level
- *       - Update parking system status to 'PalletMovingToGround'
  *       - Send notification to customer with estimated time
+ *       Parking system status is updated only via PUT /api/operator/parking-system/status.
  *     tags: [Operator]
  *     security:
  *       - bearerAuth: []
@@ -1868,7 +1868,9 @@ router.post('/call-pallet-by-car-number', authorize('operator'), validateCallPal
  * /api/operator/parking-system/status:
  *   put:
  *     summary: Update parking system status (Operator only)
- *     description: Updates the parking system status to 'AtGround' or 'Idle'. Operators can use this to indicate when a pallet has reached the ground level or when the system is idle.
+ *     description: |
+ *       Sets the parking system status. This is the only endpoint that persists parking system status in the database.
+ *       Values map to physical states: Idle; LiftUp/LiftDown; LeftTaking, LeftLeaving, RightTaking, RightLeaving; turntable TT_0_180, TT_180_0; DoorOpen, DoorClose.
  *     tags: [Operator]
  *     security:
  *       - bearerAuth: []
@@ -1883,9 +1885,9 @@ router.post('/call-pallet-by-car-number', authorize('operator'), validateCallPal
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [AtGround, Idle]
- *                 description: New status for the parking system
- *                 example: "AtGround"
+ *                 enum: [Idle, LiftUp, LiftDown, LeftTaking, LeftLeaving, RightTaking, RightLeaving, TT_0_180, TT_180_0, DoorOpen, DoorClose]
+ *                 description: New status for the parking system (must match model enum)
+ *                 example: "LiftUp"
  *     responses:
  *       200:
  *         description: Parking system status updated successfully
@@ -1921,7 +1923,7 @@ router.post('/call-pallet-by-car-number', authorize('operator'), validateCallPal
  *                           type: integer
  *                         status:
  *                           type: string
- *                           enum: [Idle, PalletMovingToGround, PalletMovingToParking, AtGround]
+ *                           enum: [Idle, LiftUp, LiftDown, LeftTaking, LeftLeaving, RightTaking, RightLeaving, TT_0_180, TT_180_0, DoorOpen, DoorClose]
  *                         createdAt:
  *                           type: string
  *                           format: date-time
@@ -2092,7 +2094,7 @@ router.post('/release-parked-car', authorize('operator'), validateReleaseParkedC
  *                   properties:
  *                     status:
  *                       type: string
- *                       enum: [Idle, PalletMovingToGround, PalletMovingToParking, AtGround]
+ *                       enum: [Idle, LiftUp, LiftDown, LeftTaking, LeftLeaving, RightTaking, RightLeaving, TT_0_180, TT_180_0, DoorOpen, DoorClose]
  *                       description: Current status of the parking system
  *       401:
  *         description: Unauthorized - Authentication required

@@ -1101,7 +1101,7 @@ router.post('/parking-request', authenticate, parkingRequestController.createPar
  *                   properties:
  *                     status:
  *                       type: string
- *                       enum: [Idle, PalletMovingToGround, PalletMovingToParking, AtGround]
+ *                       enum: [Idle, LiftUp, LiftDown, LeftTaking, LeftLeaving, RightTaking, RightLeaving, TT_0_180, TT_180_0, DoorOpen, DoorClose]
  *                       description: Current status of the parking system
  *       401:
  *         description: Unauthorized - Authentication required

@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
+const { PARKING_SYSTEM_STATUS_VALUES } = require('../constants/parkingSystemStatus');
 
 const ParkingSystem = sequelize.define('ParkingSystem', {
   Id: {
@@ -54,7 +55,7 @@ const ParkingSystem = sequelize.define('ParkingSystem', {
     defaultValue: 0
   },
   Status: {
-    type: DataTypes.ENUM('Idle', 'PalletMovingToGround', 'PalletMovingToParking', 'AtGround'),
+    type: DataTypes.ENUM(...PARKING_SYSTEM_STATUS_VALUES),
     defaultValue: 'Idle'
   },
   CreatedAt: {

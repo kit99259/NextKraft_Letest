@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const crypto = require('crypto');
+const { PARKING_SYSTEM_STATUS_VALUES } = require('../constants/parkingSystemStatus');
 const notificationService = require('./notification.service');
 const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request, RequestQueue, ParkingRequest } = require('../models/associations');
 const websocketService = require('./websocket.service');
@@ -733,27 +734,6 @@ const assignPalletToCustomer = async (operatorUserId, palletId, parkingRequestId
     Status: 'Accepted',
     UpdatedAt: istTime
   });
-
-  // Step 15.2: Update parking system status to 'PalletMovingToParking'
-  await ParkingSystem.update(
-    {
-      Status: 'PalletMovingToParking',
-      UpdatedAt: istTime
-    },
-    {
-      where: {
-        Id: operator.ParkingSystemId
-      }
-    }
-  );
-
-  // Emit WebSocket event to all customers in the project
-  await emitParkingSystemStatusToProjectCustomers(
-    operator.ProjectId,
-    operator.ParkingSystemId,
-    'PalletMovingToParking',
-    istTime
-  );
 
   // Step 11: Reload pallet with associations
   await pallet.reload({
@@ -1687,29 +1667,7 @@ const callEmptyPallet = async (operatorUserId, customerId = null, carType) => {
     throw new Error('Invalid parking system type');
   }
 
-  // Step 4: Update parking system status to 'PalletMovingToGround'
-  const istTime = getISTTime();
-  await ParkingSystem.update(
-    {
-      Status: 'PalletMovingToGround',
-      UpdatedAt: istTime
-    },
-    {
-      where: {
-        Id: parkingSystem.Id
-      }
-    }
-  );
-
-  // Emit WebSocket event to all customers in the project
-  await emitParkingSystemStatusToProjectCustomers(
-    operator.ProjectId,
-    parkingSystem.Id,
-    'PalletMovingToGround',
-    istTime
-  );
-
-  // Step 5: Format time in human-readable format
+  // Step 4: Format time in human-readable format
   const formatTime = (seconds) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
@@ -1856,28 +1814,7 @@ const callSpecificPallet = async (operatorUserId, palletId, requestId) => {
     UpdatedAt: istTime
   });
 
-  // Step 10: Update parking system status to 'PalletMovingToGround'
-  await ParkingSystem.update(
-    {
-      Status: 'PalletMovingToGround',
-      UpdatedAt: istTime
-    },
-    {
-      where: {
-        Id: parkingSystem.Id
-      }
-    }
-  );
-
-  // Emit WebSocket event to all customers in the project
-  await emitParkingSystemStatusToProjectCustomers(
-    operator.ProjectId,
-    parkingSystem.Id,
-    'PalletMovingToGround',
-    istTime
-  );
-
-  // Step 11: Format time in human-readable format
+  // Step 10: Format time in human-readable format
   const formatTime = (seconds) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
@@ -1942,9 +1879,8 @@ const callSpecificPallet = async (operatorUserId, palletId, requestId) => {
 // Update Parking System Status Service
 const updateParkingSystemStatus = async (operatorUserId, status) => {
   // Step 1: Validate status
-  const validStatuses = ['AtGround', 'Idle'];
-  if (!validStatuses.includes(status)) {
-    throw new Error(`Invalid status. Status must be one of: ${validStatuses.join(', ')}`);
+  if (!PARKING_SYSTEM_STATUS_VALUES.includes(status)) {
+    throw new Error(`Invalid status. Status must be one of: ${PARKING_SYSTEM_STATUS_VALUES.join(', ')}`);
   }
 
   // Step 2: Find operator by userId
@@ -2156,27 +2092,6 @@ const releaseParkedCar = async (operatorUserId, palletId) => {
     Status: 'Released',
     UpdatedAt: istTime
   });
-
-  // Step 11.1: Update parking system status to 'PalletMovingToParking'
-  await ParkingSystem.update(
-    {
-      Status: 'PalletMovingToParking',
-      UpdatedAt: istTime
-    },
-    {
-      where: {
-        Id: parkingSystem.Id
-      }
-    }
-  );
-
-  // Emit WebSocket event to all customers in the project
-  await emitParkingSystemStatusToProjectCustomers(
-    operator.ProjectId,
-    parkingSystem.Id,
-    'PalletMovingToParking',
-    istTime
-  );
 
   // Step 12: Insert into RequestQueue as history
   await RequestQueue.create({
@@ -2425,28 +2340,7 @@ const callPalletAndCreateRequest = async (operatorUserId, palletId) => {
     UpdatedAt: istTime
   });
 
-  // Step 12: Update parking system status to 'PalletMovingToGround'
-  await ParkingSystem.update(
-    {
-      Status: 'PalletMovingToGround',
-      UpdatedAt: istTime
-    },
-    {
-      where: {
-        Id: parkingSystem.Id
-      }
-    }
-  );
-
-  // Emit WebSocket event to all customers in the project
-  await emitParkingSystemStatusToProjectCustomers(
-    operator.ProjectId,
-    parkingSystem.Id,
-    'PalletMovingToGround',
-    istTime
-  );
-
-  // Step 13: Format time in human-readable format
+  // Step 12: Format time in human-readable format
   const formatTime = (seconds) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
@@ -2461,7 +2355,7 @@ const callPalletAndCreateRequest = async (operatorUserId, palletId) => {
 
   const timeToCallFormatted = formatTime(timeToCall);
 
-  // Step 14: Send notification to customer with estimated time
+  // Step 13: Send notification to customer with estimated time
   if (customer && customer.user) {
     await notificationService.sendNotificationToUser(
       pallet.UserId,
@@ -2691,28 +2585,7 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
     UpdatedAt: istTime
   });
 
-  // Step 10: Update parking system status to 'PalletMovingToGround'
-  await ParkingSystem.update(
-    {
-      Status: 'PalletMovingToGround',
-      UpdatedAt: istTime
-    },
-    {
-      where: {
-        Id: parkingSystem.Id
-      }
-    }
-  );
-
-  // Emit WebSocket event to all customers in the project
-  await emitParkingSystemStatusToProjectCustomers(
-    operator.ProjectId,
-    parkingSystem.Id,
-    'PalletMovingToGround',
-    istTime
-  );
-
-  // Step 12: Format time in human-readable format
+  // Step 10: Format time in human-readable format
   const formatTime = (seconds) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
@@ -2727,7 +2600,7 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
 
   const timeToCallFormatted = formatTime(timeToCall);
 
-  // Step 13: Send notification to customer
+  // Step 11: Send notification to customer
   if (customer && customer.user) {
     await notificationService.sendNotificationToUser(
       car.UserId,
