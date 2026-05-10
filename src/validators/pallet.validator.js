@@ -119,14 +119,37 @@ const validateUpdateParkingSystemStatus = [
   handleValidationErrors
 ];
 
-// Release parked car validation rules
+// Release parked car — identify the active release request by id
 const validateReleaseParkedCar = [
-  body('palletId')
+  body('requestId')
     .notEmpty()
-    .withMessage('Pallet ID is required')
+    .withMessage('requestId is required')
     .isInt({ min: 1 })
-    .withMessage('Pallet ID must be a valid integer'),
+    .withMessage('requestId must be a valid integer'),
   
+  handleValidationErrors
+];
+
+// Unified car-out: exactly one of carNumber (4 digits) or requestId
+const validateCarOut = [
+  body('carNumber')
+    .optional()
+    .isString()
+    .withMessage('carNumber must be a string')
+    .matches(/^\d{4}$/)
+    .withMessage('carNumber must be exactly 4 digits (last 4 of plate)'),
+  body('requestId')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('requestId must be a positive integer'),
+  body().custom((value) => {
+    const hasC = value.carNumber != null && String(value.carNumber).trim() !== '';
+    const hasR = value.requestId != null && value.requestId !== '' && !Number.isNaN(parseInt(value.requestId, 10));
+    if (hasC === hasR) {
+      throw new Error('Provide exactly one of carNumber or requestId');
+    }
+    return true;
+  }),
   handleValidationErrors
 ];
 
@@ -180,6 +203,7 @@ module.exports = {
   validateCallEmptyPallet,
   validateUpdateParkingSystemStatus,
   validateReleaseParkedCar,
+  validateCarOut,
   validateCallSpecificPallet,
   validateCallPalletAndCreateRequest,
   validateCallPalletByCarNumber

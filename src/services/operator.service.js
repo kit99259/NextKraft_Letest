@@ -1977,8 +1977,8 @@ const updateParkingSystemStatus = async (operatorUserId, status) => {
   };
 };
 
-// Release Parked Car Service
-const releaseParkedCar = async (operatorUserId, palletId) => {
+// Release Parked Car Service — keyed by release Request id (same completion flow as before)
+const releaseParkedCar = async (operatorUserId, requestId) => {
   // Step 1: Find operator by userId
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId }
@@ -1993,7 +1993,35 @@ const releaseParkedCar = async (operatorUserId, palletId) => {
     throw new Error('Operator is not assigned to a project and parking system');
   }
 
-  // Step 3: Get parking system with time information
+  // Step 3: Load active release request by id for this operator scope
+  const request = await Request.findOne({
+    where: {
+      Id: requestId,
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId,
+      Status: { [Op.notIn]: ['Completed', 'Cancelled'] }
+    },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['Id', 'Username', 'Role']
+      },
+      {
+        model: Car,
+        as: 'car',
+        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+      }
+    ]
+  });
+
+  if (!request) {
+    throw new Error('No active request found for this request id');
+  }
+
+  const palletId = request.PalletAllotmentId;
+
+  // Step 4: Get parking system with time information
   const parkingSystem = await ParkingSystem.findByPk(operator.ParkingSystemId, {
     attributes: ['Id', 'WingName', 'Type', 'Level', 'LevelBelowGround', 'Column', 'TimeForEachLevel', 'TimeForHorizontalMove', 'BufferTime']
   });
@@ -2002,7 +2030,7 @@ const releaseParkedCar = async (operatorUserId, palletId) => {
     throw new Error('Parking system not found');
   }
 
-  // Step 4: Find the pallet
+  // Step 5: Find the pallet
   const pallet = await PalletAllotment.findByPk(palletId, {
     include: [
       {
@@ -2022,17 +2050,17 @@ const releaseParkedCar = async (operatorUserId, palletId) => {
     throw new Error('Pallet not found');
   }
 
-  // Step 5: Validate pallet belongs to operator's parking system
+  // Step 6: Validate pallet belongs to operator's parking system
   if (pallet.ParkingSystemId !== operator.ParkingSystemId) {
     throw new Error('Pallet does not belong to your parking system');
   }
 
-  // Step 6: Validate pallet is assigned (has a customer)
+  // Step 7: Validate pallet is assigned (has a customer)
   if (pallet.Status !== 'Assigned' || pallet.UserId === 0 || !pallet.CarId) {
     throw new Error('Pallet is not assigned to any customer or car');
   }
 
-  // Step 7: Calculate time to move pallet to ground (same logic as callSpecificPallet)
+  // Step 8: Calculate time to move pallet to ground (same logic as callSpecificPallet)
   let timeToCall = 0;
 
   if (parkingSystem.Type === 'Tower') {
@@ -2077,34 +2105,8 @@ const releaseParkedCar = async (operatorUserId, palletId) => {
     }
   };
 
-  // Step 8: Find the request associated with this pallet
-  const request = await Request.findOne({
-    where: {
-      PalletAllotmentId: palletId,
-      ProjectId: operator.ProjectId,
-      ParkingSystemId: operator.ParkingSystemId,
-      Status: { [Op.notIn]: ['Completed', 'Cancelled'] }
-    },
-    include: [
-      {
-        model: User,
-        as: 'user',
-        attributes: ['Id', 'Username', 'Role']
-      },
-      {
-        model: Car,
-        as: 'car',
-        attributes: ['Id', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
-      }
-    ]
-  });
-
-  if (!request) {
-    throw new Error('No active request found for this pallet');
-  }
-
   // Step 9: Store request ID before deletion for notification
-  const requestId = request.Id;
+  const resolvedRequestId = request.Id;
 
   // Step 10: Update request status to Completed
   const istTime = getISTTime();
@@ -2167,14 +2169,14 @@ const releaseParkedCar = async (operatorUserId, palletId) => {
       {
         type: 'car_released',
         palletId: palletId.toString(),
-        requestId: requestId.toString()
+        requestId: resolvedRequestId.toString()
       }
     );
 
     // Emit WebSocket event to customer
     await websocketService.emitToUser(request.UserId, 'car_released', {
       palletId: palletId,
-      requestId: requestId,
+      requestId: resolvedRequestId,
       carId: request.CarId,
       status: request.Status
     });
@@ -2686,6 +2688,113 @@ const callPalletByCarNumber = async (operatorUserId, carNumber) => {
   };
 };
 
+/**
+ * Unified car-out: exactly one of carNumber (last 4 digits) or requestId.
+ * - requestId: accept pending/queued release request (same as call-specific-pallet); if already Accepted, returns id only.
+ * - carNumber: resolve pallet by last 4; if an open request exists (pending/queued), accept it; else create + accept as call-pallet-by-car-number.
+ * Response shape for API is only { requestId } at controller layer (service returns same).
+ */
+const carOut = async (operatorUserId, carNumber, requestId) => {
+  const hasCar = carNumber != null && String(carNumber).trim() !== '';
+  const hasReq = requestId != null && requestId !== '' && !Number.isNaN(Number(requestId));
+  if (hasCar === hasReq) {
+    throw new Error('Provide exactly one of carNumber or requestId');
+  }
+
+  const operator = await Operator.findOne({
+    where: { UserId: operatorUserId },
+    include: [
+      {
+        model: ParkingSystem,
+        as: 'parkingSystem',
+        attributes: ['Id', 'Type', 'Level', 'LevelBelowGround', 'Column', 'TimeForEachLevel', 'TimeForHorizontalMove', 'BufferTime']
+      }
+    ]
+  });
+
+  if (!operator) {
+    throw new Error('Operator profile not found');
+  }
+  if (!operator.ParkingSystemId || !operator.parkingSystem) {
+    throw new Error('Operator is not assigned to a parking system');
+  }
+  if (!operator.ProjectId) {
+    throw new Error('Operator is not assigned to a project');
+  }
+
+  if (hasReq) {
+    const rid = parseInt(requestId, 10);
+    const reqRow = await Request.findOne({
+      where: {
+        Id: rid,
+        ProjectId: operator.ProjectId,
+        ParkingSystemId: operator.ParkingSystemId
+      }
+    });
+
+    if (!reqRow) {
+      throw new Error('Request not found or does not belong to your parking system');
+    }
+
+    if (reqRow.Status === 'Accepted') {
+      return { requestId: rid };
+    }
+    if (reqRow.Status !== 'Pending' && reqRow.Status !== 'Queued') {
+      throw new Error(`Cannot accept request with status: ${reqRow.Status}. Only Pending and Queued requests can be accepted.`);
+    }
+
+    await callSpecificPallet(operatorUserId, reqRow.PalletAllotmentId, rid);
+    return { requestId: rid };
+  }
+
+  // carNumber (last 4) — same resolution as callPalletByCarNumber
+  const matchingCars = await findCarsMatchingLast4InOperatorScope(operator, String(carNumber).trim());
+
+  if (!matchingCars || matchingCars.length === 0) {
+    throw new Error(`No car found with last 4 digits in this project and parking system: ${carNumber}`);
+  }
+  if (matchingCars.length > 1) {
+    throw new Error('Multiple cars match last 4 digits in this parking system');
+  }
+
+  const parkedPallet = await PalletAllotment.findOne({
+    where: {
+      CarId: matchingCars[0].Id,
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId,
+      Status: 'Assigned'
+    },
+    attributes: ['Id']
+  });
+
+  if (!parkedPallet) {
+    throw new Error(`Car with last 4 digits ${carNumber} is not parked in your parking system`);
+  }
+
+  const existingRequest = await Request.findOne({
+    where: {
+      PalletAllotmentId: parkedPallet.Id,
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId,
+      Status: { [Op.notIn]: ['Completed', 'Cancelled'] }
+    }
+  });
+
+  if (existingRequest) {
+    if (existingRequest.Status === 'Accepted') {
+      return { requestId: existingRequest.Id };
+    }
+    if (existingRequest.Status === 'Pending' || existingRequest.Status === 'Queued') {
+      await callSpecificPallet(operatorUserId, parkedPallet.Id, existingRequest.Id);
+      return { requestId: existingRequest.Id };
+    }
+    throw new Error(`Cannot accept request with status: ${existingRequest.Status}`);
+  }
+
+  const created = await callPalletByCarNumber(operatorUserId, String(carNumber).trim());
+  return { requestId: created.request.id };
+};
+
 module.exports = {
   createOperator,
   getOperatorProfile,
@@ -2703,7 +2812,8 @@ module.exports = {
   releaseParkedCar,
   callSpecificPallet,
   callPalletAndCreateRequest,
-  callPalletByCarNumber
+  callPalletByCarNumber,
+  carOut
 };
 
 

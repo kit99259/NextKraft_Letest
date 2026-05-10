@@ -5,7 +5,7 @@ const operatorController = require('../controllers/operator.controller');
 const parkingSystemController = require('../controllers/parkingSystem.controller');
 const parkingRequestController = require('../controllers/parkingRequest.controller');
 const { validateCreateOperator } = require('../validators/operator.validator');
-const { validateCarIn, validateParkCar, validateUpdateRequestStatus, validateCallEmptyPallet, validateUpdateParkingSystemStatus, validateReleaseParkedCar, validateCallSpecificPallet, validateCallPalletAndCreateRequest, validateCallPalletByCarNumber } = require('../validators/pallet.validator');
+const { validateCarIn, validateParkCar, validateUpdateRequestStatus, validateCallEmptyPallet, validateUpdateParkingSystemStatus, validateReleaseParkedCar, validateCarOut, validateCallSpecificPallet, validateCallPalletAndCreateRequest, validateCallPalletByCarNumber } = require('../validators/pallet.validator');
 const { validateParkingSync } = require('../validators/parkingSync.validator');
 
 // All routes require authentication
@@ -1429,6 +1429,63 @@ router.post('/call-empty-pallet', authorize('operator'), validateCallEmptyPallet
 
 /**
  * @swagger
+ * /api/operator/car-out:
+ *   post:
+ *     summary: Car out — unified operator retrieve (Operator only)
+ *     description: |
+ *       Single endpoint replacing call-specific-pallet, call-pallet-create-request (by pallet), and call-pallet-by-car-number for the accept/create flow.
+ *       Send exactly one of **carNumber** (4 digits, last 4 of plate) or **requestId**.
+ *       - **requestId**: Accept a pending/queued release request for this operator scope; if already Accepted, returns the same id.
+ *       - **carNumber**: Resolve car by last 4 within project + parking system; if an open request exists it is accepted; otherwise a new request is created and accepted (same as call-pallet-by-car-number).
+ *       Response **data** contains only **requestId**. Use it with POST /api/operator/release-parked-car when the car has left the pallet.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               carNumber:
+ *                 type: string
+ *                 pattern: '^\\d{4}$'
+ *                 example: "1234"
+ *               requestId:
+ *                 type: integer
+ *                 minimum: 1
+ *                 example: 42
+ *     responses:
+ *       200:
+ *         description: Returns only requestId in data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     requestId:
+ *                       type: integer
+ *       400:
+ *         description: Validation error or invalid request state
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Operator access required
+ *       404:
+ *         description: Not found
+ */
+router.post('/car-out', authorize('operator'), validateCarOut, operatorController.carOut);
+
+/**
+ * @swagger
  * /api/operator/call-specific-pallet:
  *   post:
  *     summary: Call specific pallet and accept request (Operator only)
@@ -1888,8 +1945,9 @@ router.put('/parking-system/status', authorize('operator'), validateUpdateParkin
  *   post:
  *     summary: Release parked car (Operator only)
  *     description: |
- *       Releases a parked car from a pallet. This will:
- *       - Find the active request associated with the pallet
+ *       Releases a parked car using the **release Request** id (from POST /api/operator/car-out or customer release flow).
+ *       This will:
+ *       - Load the active request by requestId for this operator's project + parking system
  *       - Set the request status to 'Completed'
  *       - Release the pallet (set UserId to 0, CarId to null, Status to 'Released')
  *       - Move the request to request_queue table as history
@@ -1905,13 +1963,13 @@ router.put('/parking-system/status', authorize('operator'), validateUpdateParkin
  *           schema:
  *             type: object
  *             required:
- *               - palletId
+ *               - requestId
  *             properties:
- *               palletId:
+ *               requestId:
  *                 type: integer
  *                 minimum: 1
- *                 description: ID of the pallet from which to release the car
- *                 example: 123
+ *                 description: Active release request id (same as returned by car-out)
+ *                 example: 456
  *     responses:
  *       200:
  *         description: Car released successfully
@@ -2005,7 +2063,7 @@ router.put('/parking-system/status', authorize('operator'), validateUpdateParkin
  *       403:
  *         description: Forbidden - Operator access required
  *       404:
- *         description: Operator profile not found, pallet not found, or no active request found
+ *         description: Operator profile not found, pallet not found, or no active request for this requestId
  */
 router.post('/release-parked-car', authorize('operator'), validateReleaseParkedCar, operatorController.releaseParkedCar);
 

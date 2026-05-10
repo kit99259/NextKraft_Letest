@@ -291,10 +291,10 @@ const updateParkingSystemStatus = async (req, res) => {
 const releaseParkedCar = async (req, res) => {
   try {
     const operatorUserId = req.user.id; // Get operator userId from authenticated session
-    const { palletId } = req.body;
-    
-    const result = await operatorService.releaseParkedCar(operatorUserId, parseInt(palletId));
-    
+    const { requestId } = req.body;
+
+    const result = await operatorService.releaseParkedCar(operatorUserId, parseInt(requestId, 10));
+
     return successResponse(res, result, 'Car released successfully');
   } catch (error) {
     console.error('Release parked car error:', error);
@@ -303,8 +303,40 @@ const releaseParkedCar = async (req, res) => {
                        error.message === 'Pallet not found' ? 404 :
                        error.message === 'Pallet does not belong to your parking system' ? 400 :
                        error.message === 'Pallet is not assigned to any customer or car' ? 400 :
-                       error.message === 'No active request found for this pallet' ? 404 : 500;
+                       error.message === 'No active request found for this request id' ? 404 : 500;
     return errorResponse(res, error.message || 'Failed to release parked car', statusCode);
+  }
+};
+
+// Car out — unified call (by last 4 or existing request id); response data is only { requestId }
+const carOut = async (req, res) => {
+  try {
+    const operatorUserId = req.user.id;
+    const { carNumber, requestId } = req.body;
+
+    const result = await operatorService.carOut(
+      operatorUserId,
+      carNumber != null && String(carNumber).trim() !== '' ? String(carNumber).trim() : null,
+      requestId != null && requestId !== '' ? parseInt(requestId, 10) : null
+    );
+
+    return successResponse(res, result, 'Car out successful');
+  } catch (error) {
+    console.error('Car out error:', error);
+    const statusCode = error.message === 'Operator profile not found' ? 404 :
+                       error.message === 'Operator is not assigned to a parking system' ? 400 :
+                       error.message === 'Operator is not assigned to a project' ? 400 :
+                       error.message === 'Request not found or does not belong to your parking system' ? 404 :
+                       error.message === 'Pallet not found' ? 404 :
+                       error.message === 'Pallet does not belong to your parking system' ? 400 :
+                       error.message.includes('No car found with last 4 digits') ? 404 :
+                       error.message.includes('not parked in your parking system') ? 404 :
+                       error.message.includes('Cannot accept request with status') ? 400 :
+                       error.message === 'Multiple cars match last 4 digits in this parking system' ? 400 :
+                       error.message.includes('Provide exactly one of carNumber or requestId') ? 400 :
+                       error.message === 'Pallet location information is invalid' ? 400 :
+                       error.message === 'Invalid parking system type' ? 400 : 500;
+    return errorResponse(res, error.message || 'Failed to process car out', statusCode);
   }
 };
 
@@ -421,6 +453,7 @@ module.exports = {
   callEmptyPallet,
   updateParkingSystemStatus,
   releaseParkedCar,
+  carOut,
   callSpecificPallet,
   callPalletAndCreateRequest,
   callPalletByCarNumber,
