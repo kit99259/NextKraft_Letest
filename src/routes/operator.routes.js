@@ -851,7 +851,7 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  *     description: |
  *       Accepts the parking request (Accepted). Does not assign PalletDetails — assignment happens in POST /api/operator/park-car.
  *       Pallet is resolved by floor + floorColumn within the operator's parking system (Level/Column above ground, or LevelBelowGround/Column below ground).
- *       Either parkingRequestId or carNumber (same rules as before).
+ *       Either parkingRequestId or carNumber. When using carNumber, send exactly 4 digits (last 4 of plate); lookup matches retrieve — scoped to this project + parking system. If no match, dummy user/car creation runs as before.
  *     tags: [Operator]
  *     security:
  *       - bearerAuth: []
@@ -878,6 +878,9 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  *                 minimum: 1
  *               carNumber:
  *                 type: string
+ *                 pattern: '^\\d{4}$'
+ *                 description: Last 4 digits of plate (same matching rules as POST call-pallet-by-car-number)
+ *                 example: "1234"
  *     responses:
  *       200:
  *         description: Returns parkingRequestId and resolved palletId
@@ -1668,12 +1671,13 @@ router.post('/call-pallet-create-request', authorize('operator'), validateCallPa
  * @swagger
  * /api/operator/call-pallet-by-car-number:
  *   post:
- *     summary: Call pallet by car number last 6 digits (Operator only)
+ *     summary: Call pallet by plate last 4 digits — car retrieve (Operator only)
  *     description: |
- *       Finds a car by the last 6 characters of its car number (unique), checks if it's parked,
- *       and creates a release request.
- *       This will:
- *       - Search for car with matching last 6 characters (unique identifier)
+ *       Send `carNumber`: exactly 4 digits (last 4 of the plate).
+ *       Matches cars only among customers of this operator's ProjectId and ParkingSystemId (plate suffix via RIGHT 4, spaces stripped).
+ *       Requires exactly one such car; errors if none or multiple. Then finds that car parked (Assigned) on this project + parking system.
+ *       Creates a release request. This will:
+ *       - Resolve plate by last 4 digits within scope (not global LIKE search)
  *       - Check if the car is parked in operator's parking system
  *       - Check if a request already exists (if yes, throws error)
  *       - Create a new release request with status 'Pending'
@@ -1690,14 +1694,13 @@ router.post('/call-pallet-create-request', authorize('operator'), validateCallPa
  *           schema:
  *             type: object
  *             required:
- *               - carNumberLast6
+ *               - carNumber
  *             properties:
- *               carNumberLast6:
+ *               carNumber:
  *                 type: string
- *                 minLength: 6
- *                 maxLength: 6
- *                 description: Last 6 characters of the car number (unique identifier)
- *                 example: "123456"
+ *                 pattern: '^\\d{4}$'
+ *                 description: Exactly 4 digits — last 4 of plate (scoped to this project + parking system)
+ *                 example: "1234"
  *     responses:
  *       200:
  *         description: Pallet called and request created successfully by car number
@@ -1791,13 +1794,13 @@ router.post('/call-pallet-create-request', authorize('operator'), validateCallPa
  *                           type: string
  *                           nullable: true
  *       400:
- *         description: Validation error, request already exists, or car not parked in operator's parking system
+ *         description: Validation error, multiple plate matches in scope, or request already exists
  *       401:
  *         description: Unauthorized
  *       403:
  *         description: Forbidden - Operator access required
  *       404:
- *         description: Operator profile not found, no car found with last 6 characters, or car not parked in operator's parking system
+ *         description: Operator profile not found, no car in scope, or car not parked in operator's parking system
  */
 router.post('/call-pallet-by-car-number', authorize('operator'), validateCallPalletByCarNumber, operatorController.callPalletByCarNumber);
 

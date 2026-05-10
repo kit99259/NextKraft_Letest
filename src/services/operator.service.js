@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const crypto = require('crypto');
+const { sequelize } = require('../config/database');
 const { PARKING_SYSTEM_STATUS_VALUES } = require('../constants/parkingSystemStatus');
 const notificationService = require('./notification.service');
 const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request, RequestQueue, ParkingRequest } = require('../models/associations');
@@ -16,6 +17,36 @@ const getISTTime = () => {
   // Create IST time
   const istTime = new Date(utcTime + istOffset);
   return istTime;
+};
+
+/** Cars whose plate ends with `last4` (RIGHT 4 after stripping spaces), only for customers of this project + parking system. Used by car-in (carNumber path) and call-pallet-by-car-number (retrieve). */
+const findCarsMatchingLast4InOperatorScope = async (operator, last4) => {
+  const customerRows = await Customer.findAll({
+    where: {
+      ProjectId: operator.ProjectId,
+      ParkingSystemId: operator.ParkingSystemId
+    },
+    attributes: ['UserId']
+  });
+  const userIds = [...new Set(customerRows.map((c) => c.UserId))];
+  if (userIds.length === 0) {
+    return [];
+  }
+
+  return Car.findAll({
+    where: {
+      UserId: { [Op.in]: userIds },
+      [Op.and]: sequelize.where(
+        sequelize.fn(
+          'RIGHT',
+          sequelize.fn('REPLACE', sequelize.col('CarNumber'), ' ', ''),
+          4
+        ),
+        last4
+      )
+    },
+    attributes: ['Id', 'UserId', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
+  });
 };
 
 // Helper function to emit WebSocket event to all customers in a project when parking system status changes
@@ -443,22 +474,16 @@ const carIn = async (operatorUserId, floor, floorColumn, parkingRequestId = null
     }
 
   } else if (carNumber) {
-    // Scenario 2: carNumber provided - new flow
-    // Step 3.1: Check if car exists
-    car = await Car.findOne({
-      where: { CarNumber: carNumber },
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['Id', 'Username', 'Role']
-        }
-      ]
-    });
+    // Scenario 2: carNumber = last 4 digits — same scope/match rule as retrieve (project + parking system)
+    const matches = await findCarsMatchingLast4InOperatorScope(operator, carNumber);
+
+    if (matches.length > 1) {
+      throw new Error('Multiple cars match last 4 digits in this parking system');
+    }
 
     let userId = null;
 
-    if (!car) {
+    if (matches.length === 0) {
       // Car doesn't exist - need to create user, customer, and car
       // Step: Find or create dummy user for this parking system
       // Each parking system should have only one dummy user
@@ -549,7 +574,8 @@ const carIn = async (operatorUserId, floor, floorColumn, parkingRequestId = null
         UpdatedAt: istTime
       });
     } else {
-      // Car exists - get user and customer
+      // Exactly one car matched last 4 in scope — get user and customer
+      car = matches[0];
       userId = car.UserId;
       
       customer = await Customer.findOne({
@@ -2420,8 +2446,8 @@ const callPalletAndCreateRequest = async (operatorUserId, palletId) => {
   };
 };
 
-// Call Pallet by Car Number Last 6 Digits Service
-const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
+// Call pallet by plate suffix — body `carNumber` is 4 digits; match last 4 of plate within ProjectId + ParkingSystemId only
+const callPalletByCarNumber = async (operatorUserId, carNumber) => {
   // Step 1: Find operator by userId
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId },
@@ -2450,26 +2476,21 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
 
   const parkingSystem = operator.parkingSystem;
 
-  // Step 4: Find all cars with matching last 6 digits
-  const matchingCars = await Car.findAll({
-    where: {
-      CarNumber: { [Op.like]: `%${carNumberLast6}` }
-    },
-    attributes: ['Id', 'UserId', 'CarType', 'CarModel', 'CarCompany', 'CarNumber']
-  });
+  // Step 4–5: Match last 4 digits within this project + parking system; then find that car parked here (Assigned + ProjectId)
+  const matchingCars = await findCarsMatchingLast4InOperatorScope(operator, carNumber);
 
   if (!matchingCars || matchingCars.length === 0) {
-    throw new Error(`No car found with last 6 digits: ${carNumberLast6}`);
+    throw new Error(`No car found with last 4 digits in this project and parking system: ${carNumber}`);
   }
 
-  // Step 5: Find which of these cars is parked in operator's parking system
-  // Get car IDs from matching cars
-  const matchingCarIds = matchingCars.map(c => c.Id);
+  if (matchingCars.length > 1) {
+    throw new Error('Multiple cars match last 4 digits in this parking system');
+  }
 
-  // Find the pallet that matches: CarId in the list AND ParkingSystemId matches AND Status is 'Assigned'
   const parkedPallet = await PalletAllotment.findOne({
     where: {
-      CarId: { [Op.in]: matchingCarIds },
+      CarId: matchingCars[0].Id,
+      ProjectId: operator.ProjectId,
       ParkingSystemId: operator.ParkingSystemId,
       Status: 'Assigned'
     },
@@ -2495,7 +2516,7 @@ const callPalletByCarNumber = async (operatorUserId, carNumberLast6) => {
   });
 
   if (!parkedPallet) {
-    throw new Error(`Car with last 6 digits ${carNumberLast6} is not parked in your parking system`);
+    throw new Error(`Car with last 4 digits ${carNumber} is not parked in your parking system`);
   }
 
   // Get the car from the parked pallet (this is the car that matches both criteria)

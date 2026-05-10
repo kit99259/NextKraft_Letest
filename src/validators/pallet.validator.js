@@ -37,8 +37,8 @@ const validateCarIn = [
     .optional()
     .isString()
     .withMessage('Car number must be a string')
-    .notEmpty()
-    .withMessage('Car number cannot be empty'),
+    .matches(/^\d{4}$/)
+    .withMessage('Car number must be exactly 4 digits (last 4 of plate; matched within this project and parking system, same as car retrieve)'),
   
   // Custom validation to ensure either parkingRequestId or carNumber is provided
   body().custom((value) => {
@@ -158,15 +158,15 @@ const validateCallPalletAndCreateRequest = [
   handleValidationErrors
 ];
 
-// Call pallet by car number last 6 digits validation rules
+// Car retrieve (call-pallet-by-car-number): last 4 digits of plate
 const validateCallPalletByCarNumber = [
-  body('carNumberLast6')
+  body('carNumber')
     .notEmpty()
-    .withMessage('Car number last 6 digits is required')
+    .withMessage('carNumber is required')
     .isString()
-    .withMessage('Car number last 6 digits must be a string')
-    .isLength({ min: 6, max: 6 })
-    .withMessage('Car number last 6 digits must be exactly 6 characters'),
+    .withMessage('carNumber must be a string')
+    .matches(/^\d{4}$/)
+    .withMessage('carNumber must be exactly 4 digits (last 4 of plate for this project and parking system)'),
   
   handleValidationErrors
 ];

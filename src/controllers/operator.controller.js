@@ -106,6 +106,7 @@ const carIn = async (req, res) => {
                        error.message === 'Pallet does not belong to your parking system' ||
                        error.message === 'Operator does not have access to this project' ||
                        error.message === 'Either parkingRequestId or carNumber must be provided' ||
+                       error.message === 'Multiple cars match last 4 digits in this parking system' ||
                        error.message.includes('Cannot assign pallet to a parking request with status') ? 400 : 500;
     return errorResponse(res, error.message || 'Failed to record car in', statusCode);
   }
@@ -364,9 +365,9 @@ const callPalletAndCreateRequest = async (req, res) => {
 const callPalletByCarNumber = async (req, res) => {
   try {
     const operatorUserId = req.user.id; // Get operator userId from authenticated session
-    const { carNumberLast6 } = req.body;
-    
-    const result = await operatorService.callPalletByCarNumber(operatorUserId, carNumberLast6);
+    const { carNumber } = req.body;
+
+    const result = await operatorService.callPalletByCarNumber(operatorUserId, carNumber);
     
     return successResponse(res, result, 'Pallet called and request created successfully by car number');
   } catch (error) {
@@ -374,8 +375,9 @@ const callPalletByCarNumber = async (req, res) => {
     const statusCode = error.message === 'Operator profile not found' ? 404 :
                        error.message === 'Operator is not assigned to a parking system' ? 400 :
                        error.message === 'Operator is not assigned to a project' ? 400 :
-                       error.message.includes('No car found with last 6 digits') ? 404 :
+                       error.message.includes('No car found with last 4 digits') ? 404 :
                        error.message.includes('is not parked in your parking system') ? 404 :
+                       error.message.includes('Multiple cars match last 4 digits') ? 400 :
                        error.message === 'Customer not found for this car' ? 404 :
                        error.message === 'Pallet location information is invalid' ? 400 :
                        error.message === 'Invalid parking system type' ? 400 :
