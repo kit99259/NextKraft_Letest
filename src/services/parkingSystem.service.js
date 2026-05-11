@@ -272,9 +272,9 @@ const generatePallets = async (parkingSystemId, startingPalletNumber) => {
 
   // Step 4: Generate pallets based on parking system type
   if (parkingSystem.Type === 'Tower') {
-    // Tower: Generate pallets for Level × Column
-    for (let currentLevel = 1; currentLevel <= parkingSystem.Level; currentLevel++) {
-      for (let currentColumn = 1; currentColumn <= parkingSystem.Column; currentColumn++) {
+    // Tower: column-major numbering — for each column, all levels bottom-to-top (L1,C1 then L2,C1 …), then next column.
+    for (let currentColumn = 1; currentColumn <= parkingSystem.Column; currentColumn++) {
+      for (let currentLevel = 1; currentLevel <= parkingSystem.Level; currentLevel++) {
         const palletDetail = await PalletAllotment.create({
           UserId: 0,
           ParkingSystemId: parkingSystemId,

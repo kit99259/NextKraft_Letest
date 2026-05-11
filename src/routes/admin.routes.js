@@ -678,7 +678,10 @@ router.post('/create-parking-system', authorize('admin'), validateCreateParkingS
  * /api/admin/generate-pallets:
  *   post:
  *     summary: Generate pallets for a parking system (Admin only)
- *     description: Automatically generates pallets for a parking system based on its configuration. Pallets will be numbered starting from the provided starting pallet number.
+ *     description: |
+ *       Automatically generates pallets for a parking system based on its configuration. Pallets will be numbered starting from the provided starting pallet number.
+ *       **Tower:** numbers increase **column-major** (column 1 — all levels 1…N, then column 2 — all levels, etc.).
+ *       **Puzzle:** unchanged from existing layout logic.
  *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
