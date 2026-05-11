@@ -478,12 +478,13 @@ const getProjectDetailsWithParkingSystemAndPallets = async (projectId) => {
         attributes: ['Id', 'WingName', 'Type', 'Level', 'LevelBelowGround', 'Column']
       }
     ],
+    // Qualify pallet columns — ParkingSystem join also has Level / LevelBelowGround / Column
     order: [
-      [sequelize.literal('CASE WHEN Level IS NULL THEN 1 ELSE 0 END'), 'ASC'],
-      ['Level', 'ASC'],
-      [sequelize.literal('CASE WHEN LevelBelowGround IS NULL THEN 1 ELSE 0 END'), 'ASC'],
-      ['LevelBelowGround', 'ASC'],
-      ['Column', 'ASC']
+      [sequelize.literal('CASE WHEN `PalletDetails`.`Level` IS NULL THEN 1 ELSE 0 END'), 'ASC'],
+      [PalletAllotment, 'Level', 'ASC'],
+      [sequelize.literal('CASE WHEN `PalletDetails`.`LevelBelowGround` IS NULL THEN 1 ELSE 0 END'), 'ASC'],
+      [PalletAllotment, 'LevelBelowGround', 'ASC'],
+      [PalletAllotment, 'Column', 'ASC']
     ]
   });
 
