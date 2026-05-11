@@ -240,7 +240,13 @@ router.get('/projects', parkingSystemController.getProjectListWithParkingSystems
  *       404:
  *         description: Project not found
  */
-router.get('/project-details', authorize('admin'), parkingSystemController.getProjectDetailsWithParkingSystemAndPallets);
+// authenticate must run before authorize (sets req.user from JWT)
+router.get(
+  '/project-details',
+  authenticate,
+  authorize('admin'),
+  parkingSystemController.getProjectDetailsWithParkingSystemAndPallets
+);
 
 // All routes below require authentication
 router.use(authenticate);
