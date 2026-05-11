@@ -108,6 +108,35 @@ const getProjectDetailsWithParkingSystemAndPallets = async (req, res) => {
   }
 };
 
+// Bulk update UserGivenPalletNumber by parking system + floor + column (Admin and Operator)
+const bulkUpdateUserGivenPalletNumbers = async (req, res) => {
+  try {
+    const rows = Array.isArray(req.body) ? req.body : req.body?.items;
+    const result = await parkingSystemService.bulkUpdateUserGivenPalletNumbers(rows, {
+      userRole: req.user.role,
+      operatorUserId: req.user.id
+    });
+
+    const message =
+      result.errorCount === 0
+        ? 'Pallet numbers updated successfully'
+        : `Updated ${result.updatedCount} pallet(s); ${result.errorCount} row(s) could not be matched`;
+
+    return successResponse(res, result, message);
+  } catch (error) {
+    console.error('Bulk update pallet numbers error:', error);
+    const statusCode = error.message === 'Request body must be a non-empty array' ||
+      error.message.startsWith('Invalid entry at index') ||
+      error.message.startsWith('Duplicate slot in request') ||
+      error.message === 'Operator is not assigned to a parking system'
+      ? 400
+      : error.message === 'Operator profile not found'
+        ? 404
+        : 500;
+    return errorResponse(res, error.message || 'Failed to update pallet numbers', statusCode);
+  }
+};
+
 // Get Parking System Status Controller (Operator and Customer)
 const getParkingSystemStatus = async (req, res) => {
   try {
@@ -135,6 +164,7 @@ module.exports = {
   getPalletDetails,
   generatePallets,
   getProjectDetailsWithParkingSystemAndPallets,
-  getParkingSystemStatus
+  getParkingSystemStatus,
+  bulkUpdateUserGivenPalletNumbers
 };
 

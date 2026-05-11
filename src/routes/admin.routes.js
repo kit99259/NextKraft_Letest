@@ -4,7 +4,7 @@ const { authenticate, authorize } = require('../middleware/auth.middleware');
 const parkingSystemController = require('../controllers/parkingSystem.controller');
 const operatorController = require('../controllers/operator.controller');
 const customerController = require('../controllers/customer.controller');
-const { validateCreateParkingSystem } = require('../validators/parkingSystem.validator');
+const { validateCreateParkingSystem, validateBulkUpdatePalletNumbers } = require('../validators/parkingSystem.validator');
 const { validateUpdatePalletPower } = require('../validators/operator.validator');
 
 // Public routes (no authentication required)
@@ -771,6 +771,65 @@ router.post('/create-parking-system', authorize('admin'), validateCreateParkingS
  *         description: Forbidden - Admin access required
  */
 router.post('/generate-pallets', authorize('admin'), parkingSystemController.generatePallets);
+
+/**
+ * @swagger
+ * /api/admin/bulk-update-pallet-numbers:
+ *   post:
+ *     summary: Bulk set user-facing pallet labels by floor and column (Admin and Operator)
+ *     description: |
+ *       For each entry, finds the pallet in `PalletDetails` for the given `parkingSystemId` where
+ *       `Column` = `floorColumn`, and `floor` matches either above-ground `Level` (LevelBelowGround null)
+ *       or below-ground `LevelBelowGround` (Level null), same as operator car-in. Sets `UserGivenPalletNumber` to `PalletNumber`.
+ *       **Operator:** every `parkingSystemId` must be their assigned parking system; other ids are returned in `errors`.
+ *       Duplicate (parkingSystemId, floor, floorColumn) in one request returns 400.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             oneOf:
+ *               - type: array
+ *                 items:
+ *                   type: object
+ *                   required: [ parkingSystemId, floor, floorColumn, PalletNumber ]
+ *                   properties:
+ *                     parkingSystemId: { type: integer, minimum: 1 }
+ *                     floor: { type: integer, minimum: 1, description: Matches Level or LevelBelowGround }
+ *                     floorColumn: { type: integer, minimum: 1 }
+ *                     PalletNumber: { type: string, description: Stored in UserGivenPalletNumber }
+ *               - type: object
+ *                 required: [ items ]
+ *                 properties:
+ *                   items:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       required: [ parkingSystemId, floor, floorColumn, PalletNumber ]
+ *                       properties:
+ *                         parkingSystemId: { type: integer }
+ *                         floor: { type: integer }
+ *                         floorColumn: { type: integer }
+ *                         PalletNumber: { type: string }
+ *     responses:
+ *       200:
+ *         description: Result lists updated rows and any rows that could not be matched
+ *       400:
+ *         description: Validation error or duplicate slots in request
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin or Operator access required
+ */
+router.post(
+  '/bulk-update-pallet-numbers',
+  authorize('admin', 'operator'),
+  validateBulkUpdatePalletNumbers,
+  parkingSystemController.bulkUpdateUserGivenPalletNumbers
+);
 
 /**
  * @swagger

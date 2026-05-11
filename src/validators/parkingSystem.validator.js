@@ -87,7 +87,21 @@ const validateCreateParkingSystem = [
   handleValidationErrors
 ];
 
+/** Body: JSON array of { parkingSystemId, floor, floorColumn, PalletNumber } OR { items: [...] } */
+const validateBulkUpdatePalletNumbers = (req, res, next) => {
+  const rows = Array.isArray(req.body) ? req.body : req.body?.items;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message:
+        'Body must be a non-empty array of objects, or { "items": [ ... ] } with a non-empty items array'
+    });
+  }
+  next();
+};
+
 module.exports = {
-  validateCreateParkingSystem
+  validateCreateParkingSystem,
+  validateBulkUpdatePalletNumbers
 };
 

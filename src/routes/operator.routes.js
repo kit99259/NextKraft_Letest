@@ -7,6 +7,7 @@ const parkingRequestController = require('../controllers/parkingRequest.controll
 const { validateCreateOperator } = require('../validators/operator.validator');
 const { validateCarIn, validateParkCar, validateUpdateRequestStatus, validateCallEmptyPallet, validateUpdateParkingSystemStatus, validateReleaseParkedCar, validateCarOut, validateCallSpecificPallet, validateCallPalletAndCreateRequest, validateCallPalletByCarNumber } = require('../validators/pallet.validator');
 const { validateParkingSync } = require('../validators/parkingSync.validator');
+const { validateBulkUpdatePalletNumbers } = require('../validators/parkingSystem.validator');
 
 // All routes require authentication
 router.use(authenticate);
@@ -842,6 +843,34 @@ router.post('/customer/status', authorize('operator'), operatorController.update
  *         description: Forbidden - Admin or Operator access required
  */
 router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemController.getPalletDetails);
+
+/**
+ * @swagger
+ * /api/operator/bulk-update-pallet-numbers:
+ *   post:
+ *     summary: Bulk set user-facing pallet labels (Operator only)
+ *     description: Same as POST /api/admin/bulk-update-pallet-numbers; rows must use your assigned parkingSystemId.
+ *     tags: [Operator]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: array
+ *             items:
+ *               type: object
+ *     responses:
+ *       200:
+ *         description: Same shape as admin bulk-update (updated / errors)
+ */
+router.post(
+  '/bulk-update-pallet-numbers',
+  authorize('operator'),
+  validateBulkUpdatePalletNumbers,
+  parkingSystemController.bulkUpdateUserGivenPalletNumbers
+);
 
 /**
  * @swagger

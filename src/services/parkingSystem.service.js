@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 const { Project, ParkingSystem, PalletAllotment, Car, User, Operator, Customer } = require('../models/associations');
 const websocketService = require('./websocket.service');
@@ -592,12 +593,167 @@ const getParkingSystemStatus = async (userId, userRole) => {
   };
 };
 
+/**
+ * Bulk-set UserGivenPalletNumber by matching ParkingSystemId + floor + floorColumn to PalletDetails.
+ * Floor matches above-ground Level (LevelBelowGround null) or below-ground LevelBelowGround (Level null), same as car-in.
+ * Operators may only touch rows where parkingSystemId equals their assigned ParkingSystemId.
+ */
+const bulkUpdateUserGivenPalletNumbers = async (items, { userRole, operatorUserId } = {}) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error('Request body must be a non-empty array');
+  }
+
+  const normalized = items.map((raw, index) => {
+    const pidRaw = raw.parkingSystemId ?? raw.parkingsystemId ?? raw.ParkingSystemId;
+    const floorRaw = raw.floor ?? raw.Floor;
+    const colRaw = raw.floorColumn ?? raw.FloorColumn;
+    const pnRaw = raw.PalletNumber ?? raw.palletNumber;
+
+    const parkingSystemId =
+      pidRaw === undefined || pidRaw === null || pidRaw === ''
+        ? NaN
+        : parseInt(String(pidRaw).trim(), 10);
+    const floor =
+      floorRaw === undefined || floorRaw === null || floorRaw === ''
+        ? NaN
+        : parseInt(String(floorRaw).trim(), 10);
+    const floorColumn =
+      colRaw === undefined || colRaw === null || colRaw === ''
+        ? NaN
+        : parseInt(String(colRaw).trim(), 10);
+    const palletNumber =
+      pnRaw === undefined || pnRaw === null ? '' : String(pnRaw).trim();
+
+    return { index, parkingSystemId, floor, floorColumn, palletNumber };
+  });
+
+  for (const row of normalized) {
+    if (
+      Number.isNaN(row.parkingSystemId) ||
+      row.parkingSystemId < 1 ||
+      Number.isNaN(row.floor) ||
+      row.floor < 1 ||
+      Number.isNaN(row.floorColumn) ||
+      row.floorColumn < 1 ||
+      row.palletNumber === ''
+    ) {
+      throw new Error(
+        `Invalid entry at index ${row.index}: parkingSystemId, floor, floorColumn, and PalletNumber are required (positive ids; pallet label non-empty)`
+      );
+    }
+  }
+
+  const slotKeys = new Set();
+  for (const row of normalized) {
+    const key = `${row.parkingSystemId}:${row.floor}:${row.floorColumn}`;
+    if (slotKeys.has(key)) {
+      throw new Error(
+        `Duplicate slot in request: parkingSystemId ${row.parkingSystemId}, floor ${row.floor}, floorColumn ${row.floorColumn}`
+      );
+    }
+    slotKeys.add(key);
+  }
+
+  let operatorScopeParkingSystemId = null;
+  if (userRole === 'operator') {
+    const operator = await Operator.findOne({
+      where: { UserId: operatorUserId }
+    });
+    if (!operator) {
+      throw new Error('Operator profile not found');
+    }
+    if (!operator.ParkingSystemId) {
+      throw new Error('Operator is not assigned to a parking system');
+    }
+    operatorScopeParkingSystemId = operator.ParkingSystemId;
+  }
+
+  const parkingSystemById = new Map();
+  const istTime = getISTTime();
+  const updated = [];
+  const errors = [];
+
+  for (const row of normalized) {
+    if (operatorScopeParkingSystemId != null && row.parkingSystemId !== operatorScopeParkingSystemId) {
+      errors.push({
+        index: row.index,
+        parkingSystemId: row.parkingSystemId,
+        floor: row.floor,
+        floorColumn: row.floorColumn,
+        message: 'You can only update pallets for your assigned parking system'
+      });
+      continue;
+    }
+
+    let ps = parkingSystemById.get(row.parkingSystemId);
+    if (ps === undefined) {
+      ps = await ParkingSystem.findByPk(row.parkingSystemId);
+      parkingSystemById.set(row.parkingSystemId, ps || null);
+    }
+
+    if (!ps) {
+      errors.push({
+        index: row.index,
+        parkingSystemId: row.parkingSystemId,
+        floor: row.floor,
+        floorColumn: row.floorColumn,
+        message: 'Parking system not found'
+      });
+      continue;
+    }
+
+    const pallet = await PalletAllotment.findOne({
+      where: {
+        ParkingSystemId: row.parkingSystemId,
+        ProjectId: ps.ProjectId,
+        Column: row.floorColumn,
+        [Op.or]: [
+          { Level: row.floor, LevelBelowGround: { [Op.is]: null } },
+          { LevelBelowGround: row.floor, Level: { [Op.is]: null } }
+        ]
+      }
+    });
+
+    if (!pallet) {
+      errors.push({
+        index: row.index,
+        parkingSystemId: row.parkingSystemId,
+        floor: row.floor,
+        floorColumn: row.floorColumn,
+        message: 'No pallet found for this floor and column in this parking system'
+      });
+      continue;
+    }
+
+    await pallet.update({
+      UserGivenPalletNumber: row.palletNumber,
+      UpdatedAt: istTime
+    });
+
+    updated.push({
+      palletId: pallet.Id,
+      parkingSystemId: row.parkingSystemId,
+      floor: row.floor,
+      floorColumn: row.floorColumn,
+      userGivenPalletNumber: row.palletNumber
+    });
+  }
+
+  return {
+    updatedCount: updated.length,
+    errorCount: errors.length,
+    updated,
+    errors
+  };
+};
+
 module.exports = {
   createParkingSystem,
   getProjectListWithParkingSystems,
   getPalletDetails,
   generatePallets,
   getProjectDetailsWithParkingSystemAndPallets,
-  getParkingSystemStatus
+  getParkingSystemStatus,
+  bulkUpdateUserGivenPalletNumbers
 };
 
