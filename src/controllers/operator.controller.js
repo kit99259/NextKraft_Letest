@@ -320,7 +320,11 @@ const carOut = async (req, res) => {
       requestId != null && requestId !== '' ? parseInt(requestId, 10) : null
     );
 
-    return successResponse(res, result, 'Car out successful');
+    const { requestId: outRequestId, alreadyAccepted } = result;
+    const data = { requestId: outRequestId };
+    const message = alreadyAccepted ? 'Request already accepted' : 'Car out successful';
+
+    return successResponse(res, data, message);
   } catch (error) {
     console.error('Car out error:', error);
     const statusCode = error.message === 'Operator profile not found' ? 404 :

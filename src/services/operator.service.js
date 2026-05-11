@@ -684,14 +684,22 @@ const carIn = async (operatorUserId, floor, floorColumn, parkingRequestId = null
     throw new Error('Pallet does not belong to your parking system');
   }
 
-  // Step 11: Validate pallet is released (not already assigned)
-  if (pallet.Status === 'Assigned' && pallet.UserId !== 0) {
-    throw new Error('Pallet is already assigned to another customer');
-  }
-
   // Step 12: Validate pallet belongs to the same project
   if (operator.ProjectId !== pallet.ProjectId) {
     throw new Error('Operator does not have access to this project');
+  }
+
+  // Idempotent car-in: already Accepted → same 200 response (no re-notify, no duplicate update)
+  if (parkingRequest.Status === 'Accepted') {
+    return {
+      parkingRequestId: parkingRequest.Id,
+      palletId
+    };
+  }
+
+  // Step 11: Validate pallet is released (not already assigned)
+  if (pallet.Status === 'Assigned' && pallet.UserId !== 0) {
+    throw new Error('Pallet is already assigned to another customer');
   }
 
   // Step 13: Calculate time to move pallet to parking (same logic as callEmptyPallet)
@@ -800,7 +808,7 @@ const carIn = async (operatorUserId, floor, floorColumn, parkingRequestId = null
   };
 };
 
-// Assign pallet (UserId + Assigned; no CarId/CarType here), complete parking request, notify pallet_assigned.
+// Assign pallet (UserId, CarId, Assigned; CarType not set on pallet), complete parking request, notify pallet_assigned.
 const parkCar = async (operatorUserId, parkingRequestId, palletId) => {
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId }
@@ -909,6 +917,7 @@ const parkCar = async (operatorUserId, parkingRequestId, palletId) => {
 
   await pallet.update({
     UserId: parkingRequest.UserId,
+    CarId: car.Id,
     Status: 'Assigned',
     UpdatedAt: istTime
   });
@@ -2737,14 +2746,14 @@ const carOut = async (operatorUserId, carNumber, requestId) => {
     }
 
     if (reqRow.Status === 'Accepted') {
-      return { requestId: rid };
+      return { requestId: rid, alreadyAccepted: true };
     }
     if (reqRow.Status !== 'Pending' && reqRow.Status !== 'Queued') {
       throw new Error(`Cannot accept request with status: ${reqRow.Status}. Only Pending and Queued requests can be accepted.`);
     }
 
     await callSpecificPallet(operatorUserId, reqRow.PalletAllotmentId, rid);
-    return { requestId: rid };
+    return { requestId: rid, alreadyAccepted: false };
   }
 
   // carNumber (last 4) — same resolution as callPalletByCarNumber
@@ -2782,17 +2791,17 @@ const carOut = async (operatorUserId, carNumber, requestId) => {
 
   if (existingRequest) {
     if (existingRequest.Status === 'Accepted') {
-      return { requestId: existingRequest.Id };
+      return { requestId: existingRequest.Id, alreadyAccepted: true };
     }
     if (existingRequest.Status === 'Pending' || existingRequest.Status === 'Queued') {
       await callSpecificPallet(operatorUserId, parkedPallet.Id, existingRequest.Id);
-      return { requestId: existingRequest.Id };
+      return { requestId: existingRequest.Id, alreadyAccepted: false };
     }
     throw new Error(`Cannot accept request with status: ${existingRequest.Status}`);
   }
 
   const created = await callPalletByCarNumber(operatorUserId, String(carNumber).trim());
-  return { requestId: created.request.id };
+  return { requestId: created.request.id, alreadyAccepted: false };
 };
 
 module.exports = {

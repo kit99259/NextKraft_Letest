@@ -849,7 +849,7 @@ router.get('/pallet-details', authorize('admin', 'operator'), parkingSystemContr
  *   post:
  *     summary: Car in (Operator only)
  *     description: |
- *       Accepts the parking request (Accepted). Does not assign PalletDetails — assignment happens in POST /api/operator/park-car.
+ *       Accepts the parking request (Accepted). Slot assignment (UserId/CarId on pallet) happens in POST /api/operator/park-car.
  *       Pallet is resolved by floor + floorColumn within the operator's parking system (Level/Column above ground, or LevelBelowGround/Column below ground).
  *       Either parkingRequestId or carNumber. When using carNumber, send exactly 4 digits (last 4 of plate); lookup matches retrieve — scoped to this project + parking system. If no match, dummy user/car creation runs as before.
  *     tags: [Operator]
@@ -913,7 +913,7 @@ router.post('/car-in', authorize('operator'), validateCarIn, operatorController.
  *   post:
  *     summary: Park car — assign pallet and complete parking request (Operator only)
  *     description: |
- *       Assigns the pallet slot (UserId + Assigned on PalletDetails; no CarId/CarType here).
+ *       Assigns the pallet slot: UserId, CarId (from parking request car), Status Assigned on PalletDetails. CarType on pallet is not set.
  *       Sets parking request to Completed and sends pallet_assigned notification/WebSocket.
  *       Parking request must be Accepted (after car-in). Requires palletId for the slot being used.
  *     tags: [Operator]
