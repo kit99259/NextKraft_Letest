@@ -478,13 +478,14 @@ const getProjectDetailsWithParkingSystemAndPallets = async (projectId) => {
         attributes: ['Id', 'WingName', 'Type', 'Level', 'LevelBelowGround', 'Column']
       }
     ],
-    // Qualify pallet columns — ParkingSystem join also has Level / LevelBelowGround / Column
+    // Qualify pallet table in ORDER BY (parking_system join has same column names).
+    // Do not use [PalletAllotment, 'Level'] — with includes Sequelize treats that as a nested-association path and throws.
     order: [
       [sequelize.literal('CASE WHEN `PalletDetails`.`Level` IS NULL THEN 1 ELSE 0 END'), 'ASC'],
-      [PalletAllotment, 'Level', 'ASC'],
+      [sequelize.literal('`PalletDetails`.`Level`'), 'ASC'],
       [sequelize.literal('CASE WHEN `PalletDetails`.`LevelBelowGround` IS NULL THEN 1 ELSE 0 END'), 'ASC'],
-      [PalletAllotment, 'LevelBelowGround', 'ASC'],
-      [PalletAllotment, 'Column', 'ASC']
+      [sequelize.literal('`PalletDetails`.`LevelBelowGround`'), 'ASC'],
+      [sequelize.literal('`PalletDetails`.`Column`'), 'ASC']
     ]
   });
 
