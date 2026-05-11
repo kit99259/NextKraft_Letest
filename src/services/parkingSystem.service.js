@@ -478,14 +478,14 @@ const getProjectDetailsWithParkingSystemAndPallets = async (projectId) => {
         attributes: ['Id', 'WingName', 'Type', 'Level', 'LevelBelowGround', 'Column']
       }
     ],
-    // Qualify pallet table in ORDER BY (parking_system join has same column names).
-    // Do not use [PalletAllotment, 'Level'] — with includes Sequelize treats that as a nested-association path and throws.
+    // Qualify ORDER BY with the Sequelize alias for the root model (`FROM PalletDetails AS PalletAllotment`),
+    // not the physical table name — avoids ambiguity with parking_system.Level / Column.
     order: [
-      [sequelize.literal('CASE WHEN `PalletDetails`.`Level` IS NULL THEN 1 ELSE 0 END'), 'ASC'],
-      [sequelize.literal('`PalletDetails`.`Level`'), 'ASC'],
-      [sequelize.literal('CASE WHEN `PalletDetails`.`LevelBelowGround` IS NULL THEN 1 ELSE 0 END'), 'ASC'],
-      [sequelize.literal('`PalletDetails`.`LevelBelowGround`'), 'ASC'],
-      [sequelize.literal('`PalletDetails`.`Column`'), 'ASC']
+      [sequelize.literal('CASE WHEN `PalletAllotment`.`Level` IS NULL THEN 1 ELSE 0 END'), 'ASC'],
+      [sequelize.literal('`PalletAllotment`.`Level`'), 'ASC'],
+      [sequelize.literal('CASE WHEN `PalletAllotment`.`LevelBelowGround` IS NULL THEN 1 ELSE 0 END'), 'ASC'],
+      [sequelize.literal('`PalletAllotment`.`LevelBelowGround`'), 'ASC'],
+      [sequelize.literal('`PalletAllotment`.`Column`'), 'ASC']
     ]
   });
 
