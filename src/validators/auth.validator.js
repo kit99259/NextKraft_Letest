@@ -1,4 +1,4 @@
-const { body, validationResult } = require('express-validator');
+const { body, query, validationResult } = require('express-validator');
 
 // Validation result handler
 const handleValidationErrors = (req, res, next) => {
@@ -58,8 +58,19 @@ const validateLogin = [
   handleValidationErrors
 ];
 
+const validateUserProfileQuery = [
+  query('userId')
+    .notEmpty()
+    .withMessage('userId is required')
+    .isInt({ min: 1 })
+    .withMessage('userId must be a positive integer'),
+
+  handleValidationErrors
+];
+
 module.exports = {
   validateSignUp,
-  validateLogin
+  validateLogin,
+  validateUserProfileQuery
 };
 

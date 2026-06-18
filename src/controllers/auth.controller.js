@@ -39,7 +39,32 @@ const login = async (req, res) => {
   }
 };
 
+const getProfileByUserId = async (req, res) => {
+  try {
+    const userId = parseInt(req.query.userId, 10);
+    const result = await authService.getProfileByUserId(userId, {
+      id: req.user.id,
+      role: req.user.role
+    });
+
+    return successResponse(res, result, 'Profile retrieved successfully');
+  } catch (error) {
+    console.error('Get profile by user id error:', error);
+    const statusCode = error.message === 'User not found' ||
+      error.message === 'Customer profile not found' ||
+      error.message === 'Operator profile not found'
+      ? 404
+      : error.message.startsWith('Access denied')
+        ? 403
+        : error.message === 'Operator is not assigned to any project'
+          ? 400
+          : 500;
+    return errorResponse(res, error.message || 'Failed to retrieve profile', statusCode);
+  }
+};
+
 module.exports = {
   signUp,
-  login
+  login,
+  getProfileByUserId
 };

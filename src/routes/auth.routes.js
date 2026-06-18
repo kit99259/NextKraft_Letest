@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/auth.controller');
-const { validateSignUp, validateLogin } = require('../validators/auth.validator');
+const { authenticate } = require('../middleware/auth.middleware');
+const { validateSignUp, validateLogin, validateUserProfileQuery } = require('../validators/auth.validator');
 
 /**
  * @swagger
@@ -137,6 +138,48 @@ router.post('/signup', validateSignUp, authController.signUp);
  *         description: Invalid credentials (username or password incorrect)
  */
 router.post('/login', validateLogin, authController.login);
+
+/**
+ * @swagger
+ * /api/auth/user-profile:
+ *   get:
+ *     summary: Get profile by user ID (authenticated)
+ *     description: |
+ *       Returns role-specific profile for the given **userId** (`users.Id`).
+ *       - **customer** role → same shape as GET /api/customer/profile (`user` + `customer`)
+ *       - **operator** role → same shape as GET /api/operator/profile (`user` + `operator`)
+ *       - **admin** role → `user` object only (no extended profile table)
+ *       **Access:** Admin — any user; Operator — self or customers in their project; Customer — own userId only.
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Target user ID (users.Id)
+ *         example: 5
+ *     responses:
+ *       200:
+ *         description: Profile retrieved successfully
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: User or role profile not found
+ */
+router.get(
+  '/user-profile',
+  authenticate,
+  validateUserProfileQuery,
+  authController.getProfileByUserId
+);
 
 module.exports = router;
 

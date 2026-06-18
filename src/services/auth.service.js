@@ -1,6 +1,7 @@
-const { User } = require('../models/associations');
+const { User, Customer, Operator } = require('../models/associations');
 const { generateToken } = require('../utils');
-const websocketService = require('./websocket.service');
+const customerService = require('./customer.service');
+const operatorService = require('./operator.service');
 
 // Sign Up Service
 const signUp = async (username, password) => {
@@ -73,9 +74,68 @@ const login = async (username, password, fcmToken = null) => {
   };
 };
 
+/**
+ * Profile by users.Id — dispatches to customer/operator profile services or returns admin user only.
+ * Access: admin (any); operator (self or customers in their project); customer (self only).
+ */
+const getProfileByUserId = async (targetUserId, requester) => {
+  const user = await User.findByPk(targetUserId, {
+    attributes: ['Id', 'Username', 'Role', 'CreatedAt', 'UpdatedAt']
+  });
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  if (requester.role === 'customer') {
+    if (requester.id !== targetUserId) {
+      throw new Error('Access denied. You can only view your own profile');
+    }
+  } else if (requester.role === 'operator') {
+    if (requester.id !== targetUserId) {
+      const operator = await Operator.findOne({
+        where: { UserId: requester.id }
+      });
+      if (!operator) {
+        throw new Error('Operator profile not found');
+      }
+      if (!operator.ProjectId) {
+        throw new Error('Operator is not assigned to any project');
+      }
+      if (user.Role !== 'customer') {
+        throw new Error('Access denied. Operators can only view customer profiles in their project');
+      }
+      const customer = await Customer.findOne({
+        where: { UserId: targetUserId }
+      });
+      if (!customer || customer.ProjectId !== operator.ProjectId) {
+        throw new Error('Access denied. Customer is not in your project scope');
+      }
+    }
+  }
+
+  if (user.Role === 'customer') {
+    return customerService.getCustomerProfile(targetUserId);
+  }
+  if (user.Role === 'operator') {
+    return operatorService.getOperatorProfile(targetUserId);
+  }
+
+  return {
+    user: {
+      id: user.Id,
+      username: user.Username,
+      role: user.Role,
+      createdAt: user.CreatedAt,
+      updatedAt: user.UpdatedAt
+    }
+  };
+};
+
 module.exports = {
   signUp,
-  login
+  login,
+  getProfileByUserId
 };
 
 
