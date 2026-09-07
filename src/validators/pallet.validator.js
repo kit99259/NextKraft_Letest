@@ -142,6 +142,10 @@ const validateCarOut = [
     .optional()
     .isInt({ min: 1 })
     .withMessage('requestId must be a positive integer'),
+  body('currentFloor')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('currentFloor must be an integer >= 0'),
   body().custom((value) => {
     const hasC = value.carNumber != null && String(value.carNumber).trim() !== '';
     const hasR = value.requestId != null && value.requestId !== '' && !Number.isNaN(parseInt(value.requestId, 10));

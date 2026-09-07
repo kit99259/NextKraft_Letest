@@ -312,12 +312,18 @@ const releaseParkedCar = async (req, res) => {
 const carOut = async (req, res) => {
   try {
     const operatorUserId = req.user.id;
-    const { carNumber, requestId } = req.body;
+    const { carNumber, requestId, currentFloor } = req.body;
+
+    const parsedCurrentFloor =
+      currentFloor != null && currentFloor !== '' && !Number.isNaN(parseInt(currentFloor, 10))
+        ? Math.max(0, parseInt(currentFloor, 10))
+        : 0;
 
     const result = await operatorService.carOut(
       operatorUserId,
       carNumber != null && String(carNumber).trim() !== '' ? String(carNumber).trim() : null,
-      requestId != null && requestId !== '' ? parseInt(requestId, 10) : null
+      requestId != null && requestId !== '' ? parseInt(requestId, 10) : null,
+      parsedCurrentFloor
     );
 
     const { requestId: outRequestId, alreadyAccepted } = result;

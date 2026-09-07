@@ -1,6 +1,8 @@
 const { Op } = require('sequelize');
 const { User, Customer, ParkingSystem, Project, Car, PalletAllotment, Request, Operator, ParkingRequest } = require('../models/associations');
 const websocketService = require('./websocket.service');
+const { calculateTowerReleaseEstimatedTime } = require('../utils/towerTiming');
+const { formatEstimatedTimeInMinutes } = require('../utils/timeFormat');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -345,8 +347,9 @@ const getCarList = async (userId) => {
     let estimatedTime = 0;
 
     if (parkingSystem.Type === 'Tower') {
-      // For Tower: (Level * TimePerLevel) + BufferTime
-      estimatedTime = (palletAllotment.Level * parkingSystem.TimeForEachLevel) + (parkingSystem.BufferTime || 0);
+      // Tower release: (lift + traverse to car) + (return to ground without traverse)
+      // Distance = ABS(ground 0 - parked level)
+      estimatedTime = calculateTowerReleaseEstimatedTime(palletAllotment.Level, 0);
     } else if (parkingSystem.Type === 'Puzzle') {
       // For Puzzle: Calculate based on pallet location
       if (palletAllotment.Level !== null && palletAllotment.Level !== undefined && palletAllotment.LevelBelowGround === null) {
@@ -435,7 +438,7 @@ const getCarList = async (userId) => {
         } : null,
         status: request.Status,
         estimatedTime: calculatedEstimatedTime !== null ? calculatedEstimatedTime : request.EstimatedTime,
-        estimatedTimeFormatted: calculatedEstimatedTime !== null ? `${Math.floor(calculatedEstimatedTime / 60)} minutes ${calculatedEstimatedTime % 60} seconds` : (request.EstimatedTime ? `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds` : null),
+        estimatedTimeFormatted: calculatedEstimatedTime !== null ? formatEstimatedTimeInMinutes(calculatedEstimatedTime) : (request.EstimatedTime ? formatEstimatedTimeInMinutes(request.EstimatedTime) : null),
         createdAt: request.CreatedAt,
         updatedAt: request.UpdatedAt
       } : null,
@@ -748,7 +751,7 @@ const getCustomerPalletStatus = async (userId) => {
         } : null,
         status: request.Status,
         estimatedTime: request.EstimatedTime,
-        estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
+        estimatedTimeFormatted: formatEstimatedTimeInMinutes(request.EstimatedTime),
         waitingNumber: waitingNumber !== null && waitingNumber !== undefined ? waitingNumber : null,
         createdAt: request.CreatedAt,
         updatedAt: request.UpdatedAt
@@ -891,8 +894,9 @@ const requestCarRelease = async (userId, palletId) => {
   let estimatedTime = 0;
 
   if (pallet.parkingSystem.Type === 'Tower') {
-    // For Tower: (Level * TimePerLevel) + BufferTime
-    estimatedTime = (pallet.Level * pallet.parkingSystem.TimeForEachLevel) + (pallet.parkingSystem.BufferTime || 0);
+    // Tower release: (lift + traverse to car) + (return to ground without traverse)
+    // Distance = ABS(ground 0 - parked level)
+    estimatedTime = calculateTowerReleaseEstimatedTime(pallet.Level, 0);
   } else if (pallet.parkingSystem.Type === 'Puzzle') {
     // For Puzzle: Calculate based on pallet location
     if (pallet.Level !== null && pallet.Level !== undefined && pallet.LevelBelowGround === null) {
@@ -1072,7 +1076,7 @@ const requestCarRelease = async (userId, palletId) => {
       } : null,
       status: request.Status,
       estimatedTime: request.EstimatedTime,
-      estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
+      estimatedTimeFormatted: formatEstimatedTimeInMinutes(request.EstimatedTime),
       createdAt: request.CreatedAt,
       updatedAt: request.UpdatedAt
     });
@@ -1106,8 +1110,10 @@ const requestCarRelease = async (userId, palletId) => {
         carNumber: request.car.CarNumber
       } : null,
       status: request.Status,
+      estimatedTime: estimatedTime,
+      estimatedTimeFormatted: formatEstimatedTimeInMinutes(estimatedTime),
       totalEstimatedTime: totalEstimatedTime,
-      totalEstimatedTimeFormatted: `${Math.floor(totalEstimatedTime / 60)} minutes ${totalEstimatedTime % 60} seconds`,
+      totalEstimatedTimeFormatted: formatEstimatedTimeInMinutes(totalEstimatedTime),
       waitingNumber: waitingRequests.length,
       createdAt: request.CreatedAt,
       updatedAt: request.UpdatedAt
@@ -1258,7 +1264,7 @@ const getCustomerRequests = async (userId) => {
     } : null,
     status: request.Status,
     estimatedTime: request.EstimatedTime,
-    estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
+    estimatedTimeFormatted: formatEstimatedTimeInMinutes(request.EstimatedTime),
     createdAt: request.CreatedAt,
     updatedAt: request.UpdatedAt
   }));

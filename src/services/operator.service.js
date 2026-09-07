@@ -5,6 +5,8 @@ const { PARKING_SYSTEM_STATUS_VALUES } = require('../constants/parkingSystemStat
 const notificationService = require('./notification.service');
 const { User, Operator, Project, ParkingSystem, PalletAllotment, Customer, Car, Request, RequestQueue, ParkingRequest } = require('../models/associations');
 const websocketService = require('./websocket.service');
+const { calculateTowerReleaseEstimatedTime } = require('../utils/towerTiming');
+const { formatEstimatedTimeInMinutes } = require('../utils/timeFormat');
 
 // Helper function to get IST time
 const getISTTime = () => {
@@ -1115,7 +1117,7 @@ const getOperatorRequests = async (operatorUserId) => {
     } : null,
     status: request.Status,
     estimatedTime: request.EstimatedTime,
-    estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
+    estimatedTimeFormatted: formatEstimatedTimeInMinutes(request.EstimatedTime),
     createdAt: request.CreatedAt,
     updatedAt: request.UpdatedAt
   }));
@@ -1363,7 +1365,7 @@ const updateRequestStatus = async (operatorUserId, requestId, newStatus) => {
       } : null,
       status: request.Status,
       estimatedTime: request.EstimatedTime,
-      estimatedTimeFormatted: `${Math.floor(request.EstimatedTime / 60)} minutes ${request.EstimatedTime % 60} seconds`,
+      estimatedTimeFormatted: formatEstimatedTimeInMinutes(request.EstimatedTime),
       createdAt: request.CreatedAt,
       updatedAt: request.UpdatedAt
     },
@@ -1736,7 +1738,7 @@ const callEmptyPallet = async (operatorUserId, customerId = null, carType) => {
 };
 
 // Call Specific Pallet Service
-const callSpecificPallet = async (operatorUserId, palletId, requestId) => {
+const callSpecificPallet = async (operatorUserId, palletId, requestId, currentFloor = 0) => {
   // Step 1: Find operator by userId
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId },
@@ -1815,8 +1817,9 @@ const callSpecificPallet = async (operatorUserId, palletId, requestId) => {
   let timeToCall = 0;
 
   if (parkingSystem.Type === 'Tower') {
-    // For Tower: (Level * TimePerLevel) + BufferTime
-    timeToCall = (pallet.Level * parkingSystem.TimeForEachLevel) + parkingSystem.BufferTime;
+    // Tower release: (lift + traverse to car) + (return to ground without traverse)
+    // Distance uses live lift floor from operator car-out when provided
+    timeToCall = calculateTowerReleaseEstimatedTime(pallet.Level, currentFloor);
   } else if (parkingSystem.Type === 'Puzzle') {
     // For Puzzle: Calculate based on pallet location
     if (pallet.Level !== null && pallet.Level !== undefined && pallet.LevelBelowGround === null) {
@@ -1845,27 +1848,16 @@ const callSpecificPallet = async (operatorUserId, palletId, requestId) => {
     throw new Error('Invalid parking system type');
   }
 
-  // Step 9: Update request status to 'Accepted'
+  // Step 9: Update request status to 'Accepted' and refresh estimated time
   const istTime = getISTTime();
   await request.update({
     Status: 'Accepted',
+    EstimatedTime: timeToCall,
     UpdatedAt: istTime
   });
 
-  // Step 10: Format time in human-readable format
-  const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    if (minutes > 0 && remainingSeconds > 0) {
-      return `${minutes} minute${minutes > 1 ? 's' : ''} ${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
-    } else if (minutes > 0) {
-      return `${minutes} minute${minutes > 1 ? 's' : ''}`;
-    } else {
-      return `${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
-    }
-  };
-
-  const timeToCallFormatted = formatTime(timeToCall);
+  // Step 10: Format time in minutes only for customer release ETA
+  const timeToCallFormatted = formatEstimatedTimeInMinutes(timeToCall);
 
   // Step 12: Send notification to customer with estimated time
   if (request.user) {
@@ -2073,8 +2065,8 @@ const releaseParkedCar = async (operatorUserId, requestId) => {
   let timeToCall = 0;
 
   if (parkingSystem.Type === 'Tower') {
-    // For Tower: (Level * TimePerLevel) + BufferTime
-    timeToCall = (pallet.Level * parkingSystem.TimeForEachLevel) + parkingSystem.BufferTime;
+    // Tower release: (lift + traverse to car) + (return to ground without traverse)
+    timeToCall = calculateTowerReleaseEstimatedTime(pallet.Level, 0);
   } else if (parkingSystem.Type === 'Puzzle') {
     // For Puzzle: Calculate based on pallet location
     if (pallet.Level !== null && pallet.Level !== undefined && pallet.LevelBelowGround === null) {
@@ -2101,18 +2093,8 @@ const releaseParkedCar = async (operatorUserId, requestId) => {
     }
   }
 
-  // Format time in human-readable format
-  const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    if (minutes > 0 && remainingSeconds > 0) {
-      return `${minutes} minute${minutes > 1 ? 's' : ''} ${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
-    } else if (minutes > 0) {
-      return `${minutes} minute${minutes > 1 ? 's' : ''}`;
-    } else {
-      return `${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
-    }
-  };
+  // Format time in minutes only for release ETA
+  const timeToCallFormatted = formatEstimatedTimeInMinutes(timeToCall);
 
   // Step 9: Store request ID before deletion for notification
   const resolvedRequestId = request.Id;
@@ -2219,7 +2201,7 @@ const releaseParkedCar = async (operatorUserId, requestId) => {
       societyName: pallet.project.SocietyName
     } : null,
     timeToCall: timeToCall,
-    timeToCallFormatted: formatTime(timeToCall),
+    timeToCallFormatted: timeToCallFormatted,
     message: 'Car released successfully. Request completed, logged to history, and removed from active requests. Pallet has been released.'
   };
 };
@@ -2329,8 +2311,8 @@ const callPalletAndCreateRequest = async (operatorUserId, palletId) => {
   let timeToCall = 0;
 
   if (parkingSystem.Type === 'Tower') {
-    // For Tower: (Level * TimePerLevel) + BufferTime
-    timeToCall = (pallet.Level * parkingSystem.TimeForEachLevel) + parkingSystem.BufferTime;
+    // Tower release: (lift + traverse to car) + (return to ground without traverse)
+    timeToCall = calculateTowerReleaseEstimatedTime(pallet.Level, 0);
   } else if (parkingSystem.Type === 'Puzzle') {
     // For Puzzle: Calculate based on pallet location
     if (pallet.Level !== null && pallet.Level !== undefined && pallet.LevelBelowGround === null) {
@@ -2380,20 +2362,8 @@ const callPalletAndCreateRequest = async (operatorUserId, palletId) => {
     UpdatedAt: istTime
   });
 
-  // Step 12: Format time in human-readable format
-  const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    if (minutes > 0 && remainingSeconds > 0) {
-      return `${minutes} minute${minutes > 1 ? 's' : ''} ${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
-    } else if (minutes > 0) {
-      return `${minutes} minute${minutes > 1 ? 's' : ''}`;
-    } else {
-      return `${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
-    }
-  };
-
-  const timeToCallFormatted = formatTime(timeToCall);
+  // Step 12: Format time in minutes only for customer release ETA
+  const timeToCallFormatted = formatEstimatedTimeInMinutes(timeToCall);
 
   // Step 13: Send notification to customer with estimated time
   if (customer && customer.user) {
@@ -2458,7 +2428,7 @@ const callPalletAndCreateRequest = async (operatorUserId, palletId) => {
 };
 
 // Call pallet by plate suffix — body `carNumber` is 4 digits; match last 4 of plate within ProjectId + ParkingSystemId only
-const callPalletByCarNumber = async (operatorUserId, carNumber) => {
+const callPalletByCarNumber = async (operatorUserId, carNumber, currentFloor = 0) => {
   // Step 1: Find operator by userId
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId },
@@ -2575,8 +2545,8 @@ const callPalletByCarNumber = async (operatorUserId, carNumber) => {
   let timeToCall = 0;
 
   if (parkingSystem.Type === 'Tower') {
-    // For Tower: (Level * TimePerLevel) + BufferTime
-    timeToCall = (parkedPallet.Level * parkingSystem.TimeForEachLevel) + parkingSystem.BufferTime;
+    // Tower release: (lift + traverse to car) + (return to ground without traverse)
+    timeToCall = calculateTowerReleaseEstimatedTime(parkedPallet.Level, currentFloor);
   } else if (parkingSystem.Type === 'Puzzle') {
     // For Puzzle: Calculate based on pallet location
     if (parkedPallet.Level !== null && parkedPallet.Level !== undefined && parkedPallet.LevelBelowGround === null) {
@@ -2620,20 +2590,8 @@ const callPalletByCarNumber = async (operatorUserId, carNumber) => {
     UpdatedAt: istTime
   });
 
-  // Step 10: Format time in human-readable format
-  const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    if (minutes > 0 && remainingSeconds > 0) {
-      return `${minutes} minute${minutes > 1 ? 's' : ''} ${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
-    } else if (minutes > 0) {
-      return `${minutes} minute${minutes > 1 ? 's' : ''}`;
-    } else {
-      return `${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
-    }
-  };
-
-  const timeToCallFormatted = formatTime(timeToCall);
+  // Step 10: Format time in minutes only for customer release ETA
+  const timeToCallFormatted = formatEstimatedTimeInMinutes(timeToCall);
 
   // Step 11: Send notification to customer
   if (customer && customer.user) {
@@ -2701,14 +2659,17 @@ const callPalletByCarNumber = async (operatorUserId, carNumber) => {
  * Unified car-out: exactly one of carNumber (last 4 digits) or requestId.
  * - requestId: accept pending/queued release request (same as call-specific-pallet); if already Accepted, returns id only.
  * - carNumber: resolve pallet by last 4; if an open request exists (pending/queued), accept it; else create + accept as call-pallet-by-car-number.
+ * - currentFloor: live lift floor from PLC FLOOR_COUNTER mapped to building floors (0/1→0, 2→1, 3→2, ...).
  * Response shape for API is only { requestId } at controller layer (service returns same).
  */
-const carOut = async (operatorUserId, carNumber, requestId) => {
+const carOut = async (operatorUserId, carNumber, requestId, currentFloor = 0) => {
   const hasCar = carNumber != null && String(carNumber).trim() !== '';
   const hasReq = requestId != null && requestId !== '' && !Number.isNaN(Number(requestId));
   if (hasCar === hasReq) {
     throw new Error('Provide exactly one of carNumber or requestId');
   }
+
+  const liftFloor = Math.max(0, Number(currentFloor) || 0);
 
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId },
@@ -2752,7 +2713,7 @@ const carOut = async (operatorUserId, carNumber, requestId) => {
       throw new Error(`Cannot accept request with status: ${reqRow.Status}. Only Pending and Queued requests can be accepted.`);
     }
 
-    await callSpecificPallet(operatorUserId, reqRow.PalletAllotmentId, rid);
+    await callSpecificPallet(operatorUserId, reqRow.PalletAllotmentId, rid, liftFloor);
     return { requestId: rid, alreadyAccepted: false };
   }
 
@@ -2794,13 +2755,13 @@ const carOut = async (operatorUserId, carNumber, requestId) => {
       return { requestId: existingRequest.Id, alreadyAccepted: true };
     }
     if (existingRequest.Status === 'Pending' || existingRequest.Status === 'Queued') {
-      await callSpecificPallet(operatorUserId, parkedPallet.Id, existingRequest.Id);
+      await callSpecificPallet(operatorUserId, parkedPallet.Id, existingRequest.Id, liftFloor);
       return { requestId: existingRequest.Id, alreadyAccepted: false };
     }
     throw new Error(`Cannot accept request with status: ${existingRequest.Status}`);
   }
 
-  const created = await callPalletByCarNumber(operatorUserId, String(carNumber).trim());
+  const created = await callPalletByCarNumber(operatorUserId, String(carNumber).trim(), liftFloor);
   return { requestId: created.request.id, alreadyAccepted: false };
 };
 

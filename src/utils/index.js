@@ -46,10 +46,21 @@ const generateToken = (userId, role) => {
   );
 };
 
+const {
+  TOWER_CONSTANT_LIFT_TIME_SEC,
+  TOWER_SECONDS_PER_FLOOR,
+  TOWER_CONSTANT_TRAVERSE_TIME_SEC,
+  calculateTowerReleaseEstimatedTime,
+} = require('./towerTiming');
+
 module.exports = {
   asyncHandler,
   successResponse,
   errorResponse,
-  generateToken
+  generateToken,
+  TOWER_CONSTANT_LIFT_TIME_SEC,
+  TOWER_SECONDS_PER_FLOOR,
+  TOWER_CONSTANT_TRAVERSE_TIME_SEC,
+  calculateTowerReleaseEstimatedTime,
 };
 

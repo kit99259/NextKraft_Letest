@@ -1464,6 +1464,7 @@ router.post('/call-empty-pallet', authorize('operator'), validateCallEmptyPallet
  *     description: |
  *       Single endpoint replacing call-specific-pallet, call-pallet-create-request (by pallet), and call-pallet-by-car-number for the accept/create flow.
  *       Send exactly one of **carNumber** (4 digits, last 4 of plate) or **requestId**.
+ *       Optional **currentFloor**: live lift floor from PLC FLOOR_COUNTER mapped as 0/1→0, 2→1, 3→2, ... (used for Tower release ETA).
  *       - **requestId**: Accept a pending/queued release request for this operator scope; if already Accepted, returns the same id.
  *       - **carNumber**: Resolve car by last 4 within project + parking system; if an open request exists it is accepted; otherwise a new request is created and accepted (same as call-pallet-by-car-number).
  *       Response **data** contains only **requestId**. Use it with POST /api/operator/release-parked-car when the car has left the pallet.
@@ -1485,6 +1486,11 @@ router.post('/call-empty-pallet', authorize('operator'), validateCallEmptyPallet
  *                 type: integer
  *                 minimum: 1
  *                 example: 42
+ *               currentFloor:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: Live lift floor (PLC FLOOR_COUNTER mapped — 0/1→0, 2→1, 3→2)
+ *                 example: 2
  *     responses:
  *       200:
  *         description: Returns only requestId in data
