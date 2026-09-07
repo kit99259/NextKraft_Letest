@@ -47,10 +47,14 @@ const generateToken = (userId, role) => {
 };
 
 const {
-  TOWER_CONSTANT_LIFT_TIME_SEC,
+  TOWER_C1_SEC,
+  TOWER_C2_SEC,
   TOWER_SECONDS_PER_FLOOR,
   TOWER_CONSTANT_TRAVERSE_TIME_SEC,
+  TOWER_CONSTANT_LIFT_TIME_SEC,
   calculateTowerReleaseEstimatedTime,
+  calculateCustomerTowerReleaseQueueEstimate,
+  mapPlcFloorToBuildingFloor,
 } = require('./towerTiming');
 
 module.exports = {
@@ -58,9 +62,13 @@ module.exports = {
   successResponse,
   errorResponse,
   generateToken,
-  TOWER_CONSTANT_LIFT_TIME_SEC,
+  TOWER_C1_SEC,
+  TOWER_C2_SEC,
   TOWER_SECONDS_PER_FLOOR,
   TOWER_CONSTANT_TRAVERSE_TIME_SEC,
+  TOWER_CONSTANT_LIFT_TIME_SEC,
   calculateTowerReleaseEstimatedTime,
+  calculateCustomerTowerReleaseQueueEstimate,
+  mapPlcFloorToBuildingFloor,
 };
 

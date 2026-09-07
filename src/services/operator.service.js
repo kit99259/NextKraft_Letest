@@ -1738,7 +1738,7 @@ const callEmptyPallet = async (operatorUserId, customerId = null, carType) => {
 };
 
 // Call Specific Pallet Service
-const callSpecificPallet = async (operatorUserId, palletId, requestId, currentFloor = 0) => {
+const callSpecificPallet = async (operatorUserId, palletId, requestId, currentFloor = 0, palletFloor = 0) => {
   // Step 1: Find operator by userId
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId },
@@ -1817,9 +1817,12 @@ const callSpecificPallet = async (operatorUserId, palletId, requestId, currentFl
   let timeToCall = 0;
 
   if (parkingSystem.Type === 'Tower') {
-    // Tower release: (lift + traverse to car) + (return to ground without traverse)
-    // Distance uses live lift floor from operator car-out when provided
-    timeToCall = calculateTowerReleaseEstimatedTime(pallet.Level, currentFloor);
+    // Tower release: CURRENT → (optional pallet) → TARGET → GROUND
+    timeToCall = calculateTowerReleaseEstimatedTime({
+      targetFloor: pallet.Level,
+      currentFloor,
+      palletFloor,
+    });
   } else if (parkingSystem.Type === 'Puzzle') {
     // For Puzzle: Calculate based on pallet location
     if (pallet.Level !== null && pallet.Level !== undefined && pallet.LevelBelowGround === null) {
@@ -2066,7 +2069,12 @@ const releaseParkedCar = async (operatorUserId, requestId) => {
 
   if (parkingSystem.Type === 'Tower') {
     // Tower release: (lift + traverse to car) + (return to ground without traverse)
-    timeToCall = calculateTowerReleaseEstimatedTime(pallet.Level, 0);
+    timeToCall = calculateTowerReleaseEstimatedTime({
+      targetFloor: pallet.Level,
+      currentFloor: 0,
+      palletFloor: 0,
+      hasPalletOnLift: false,
+    });
   } else if (parkingSystem.Type === 'Puzzle') {
     // For Puzzle: Calculate based on pallet location
     if (pallet.Level !== null && pallet.Level !== undefined && pallet.LevelBelowGround === null) {
@@ -2312,7 +2320,12 @@ const callPalletAndCreateRequest = async (operatorUserId, palletId) => {
 
   if (parkingSystem.Type === 'Tower') {
     // Tower release: (lift + traverse to car) + (return to ground without traverse)
-    timeToCall = calculateTowerReleaseEstimatedTime(pallet.Level, 0);
+    timeToCall = calculateTowerReleaseEstimatedTime({
+      targetFloor: pallet.Level,
+      currentFloor: 0,
+      palletFloor: 0,
+      hasPalletOnLift: false,
+    });
   } else if (parkingSystem.Type === 'Puzzle') {
     // For Puzzle: Calculate based on pallet location
     if (pallet.Level !== null && pallet.Level !== undefined && pallet.LevelBelowGround === null) {
@@ -2428,7 +2441,7 @@ const callPalletAndCreateRequest = async (operatorUserId, palletId) => {
 };
 
 // Call pallet by plate suffix — body `carNumber` is 4 digits; match last 4 of plate within ProjectId + ParkingSystemId only
-const callPalletByCarNumber = async (operatorUserId, carNumber, currentFloor = 0) => {
+const callPalletByCarNumber = async (operatorUserId, carNumber, currentFloor = 0, palletFloor = 0) => {
   // Step 1: Find operator by userId
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId },
@@ -2545,8 +2558,12 @@ const callPalletByCarNumber = async (operatorUserId, carNumber, currentFloor = 0
   let timeToCall = 0;
 
   if (parkingSystem.Type === 'Tower') {
-    // Tower release: (lift + traverse to car) + (return to ground without traverse)
-    timeToCall = calculateTowerReleaseEstimatedTime(parkedPallet.Level, currentFloor);
+    // Tower release: CURRENT → (optional pallet) → TARGET → GROUND
+    timeToCall = calculateTowerReleaseEstimatedTime({
+      targetFloor: parkedPallet.Level,
+      currentFloor,
+      palletFloor,
+    });
   } else if (parkingSystem.Type === 'Puzzle') {
     // For Puzzle: Calculate based on pallet location
     if (parkedPallet.Level !== null && parkedPallet.Level !== undefined && parkedPallet.LevelBelowGround === null) {
@@ -2659,10 +2676,11 @@ const callPalletByCarNumber = async (operatorUserId, carNumber, currentFloor = 0
  * Unified car-out: exactly one of carNumber (last 4 digits) or requestId.
  * - requestId: accept pending/queued release request (same as call-specific-pallet); if already Accepted, returns id only.
  * - carNumber: resolve pallet by last 4; if an open request exists (pending/queued), accept it; else create + accept as call-pallet-by-car-number.
- * - currentFloor: live lift floor from PLC FLOOR_COUNTER mapped to building floors (0/1→0, 2→1, 3→2, ...).
+ * - currentFloor: live lift floor from PLC FLOOR_COUNTER (building index: 0=GF, 1=TT/1F, …).
+ * - palletFloor: Transporter_Pallet_Floor mapped the same way; 0 means no pallet on lift.
  * Response shape for API is only { requestId } at controller layer (service returns same).
  */
-const carOut = async (operatorUserId, carNumber, requestId, currentFloor = 0) => {
+const carOut = async (operatorUserId, carNumber, requestId, currentFloor = 0, palletFloor = 0) => {
   const hasCar = carNumber != null && String(carNumber).trim() !== '';
   const hasReq = requestId != null && requestId !== '' && !Number.isNaN(Number(requestId));
   if (hasCar === hasReq) {
@@ -2670,6 +2688,7 @@ const carOut = async (operatorUserId, carNumber, requestId, currentFloor = 0) =>
   }
 
   const liftFloor = Math.max(0, Number(currentFloor) || 0);
+  const transporterFloor = Math.max(0, Number(palletFloor) || 0);
 
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId },
@@ -2713,7 +2732,7 @@ const carOut = async (operatorUserId, carNumber, requestId, currentFloor = 0) =>
       throw new Error(`Cannot accept request with status: ${reqRow.Status}. Only Pending and Queued requests can be accepted.`);
     }
 
-    await callSpecificPallet(operatorUserId, reqRow.PalletAllotmentId, rid, liftFloor);
+    await callSpecificPallet(operatorUserId, reqRow.PalletAllotmentId, rid, liftFloor, transporterFloor);
     return { requestId: rid, alreadyAccepted: false };
   }
 
@@ -2755,13 +2774,13 @@ const carOut = async (operatorUserId, carNumber, requestId, currentFloor = 0) =>
       return { requestId: existingRequest.Id, alreadyAccepted: true };
     }
     if (existingRequest.Status === 'Pending' || existingRequest.Status === 'Queued') {
-      await callSpecificPallet(operatorUserId, parkedPallet.Id, existingRequest.Id, liftFloor);
+      await callSpecificPallet(operatorUserId, parkedPallet.Id, existingRequest.Id, liftFloor, transporterFloor);
       return { requestId: existingRequest.Id, alreadyAccepted: false };
     }
     throw new Error(`Cannot accept request with status: ${existingRequest.Status}`);
   }
 
-  const created = await callPalletByCarNumber(operatorUserId, String(carNumber).trim(), liftFloor);
+  const created = await callPalletByCarNumber(operatorUserId, String(carNumber).trim(), liftFloor, transporterFloor);
   return { requestId: created.request.id, alreadyAccepted: false };
 };
 

@@ -1,7 +1,7 @@
 const { Op } = require('sequelize');
 const { User, Customer, ParkingSystem, Project, Car, PalletAllotment, Request, Operator, ParkingRequest } = require('../models/associations');
 const websocketService = require('./websocket.service');
-const { calculateTowerReleaseEstimatedTime } = require('../utils/towerTiming');
+const { calculateTowerReleaseEstimatedTime, calculateCustomerTowerReleaseQueueEstimate } = require('../utils/towerTiming');
 const { formatEstimatedTimeInMinutes } = require('../utils/timeFormat');
 
 // Helper function to get IST time
@@ -347,9 +347,13 @@ const getCarList = async (userId) => {
     let estimatedTime = 0;
 
     if (parkingSystem.Type === 'Tower') {
-      // Tower release: (lift + traverse to car) + (return to ground without traverse)
-      // Distance = ABS(ground 0 - parked level)
-      estimatedTime = calculateTowerReleaseEstimatedTime(palletAllotment.Level, 0);
+      // Customer pending estimate: ground, no pallet on lift → target → ground
+      estimatedTime = calculateTowerReleaseEstimatedTime({
+        targetFloor: palletAllotment.Level,
+        currentFloor: 0,
+        palletFloor: 0,
+        hasPalletOnLift: false,
+      });
     } else if (parkingSystem.Type === 'Puzzle') {
       // For Puzzle: Calculate based on pallet location
       if (palletAllotment.Level !== null && palletAllotment.Level !== undefined && palletAllotment.LevelBelowGround === null) {
@@ -890,13 +894,20 @@ const requestCarRelease = async (userId, palletId) => {
     throw new Error('No operator assigned to this parking system. Please contact administrator');
   }
 
-  // Step 4: Calculate estimated time to bring down the car (same logic as callSpecificPallet)
+  // Step 4: Calculate base estimated time (queue wait applied after create for Tower)
   let estimatedTime = 0;
+  let totalEstimatedTime = 0;
+  let waitingNumber = 0;
 
   if (pallet.parkingSystem.Type === 'Tower') {
-    // Tower release: (lift + traverse to car) + (return to ground without traverse)
-    // Distance = ABS(ground 0 - parked level)
-    estimatedTime = calculateTowerReleaseEstimatedTime(pallet.Level, 0);
+    // Ground, no pallet on lift → target → ground (queue added in step 5.1)
+    estimatedTime = calculateTowerReleaseEstimatedTime({
+      targetFloor: pallet.Level,
+      currentFloor: 0,
+      palletFloor: 0,
+      hasPalletOnLift: false,
+    });
+    totalEstimatedTime = estimatedTime;
   } else if (pallet.parkingSystem.Type === 'Puzzle') {
     // For Puzzle: Calculate based on pallet location
     if (pallet.Level !== null && pallet.Level !== undefined && pallet.LevelBelowGround === null) {
@@ -921,6 +932,7 @@ const requestCarRelease = async (userId, palletId) => {
     } else {
       throw new Error('Pallet location information is invalid');
     }
+    totalEstimatedTime = estimatedTime;
   } else {
     throw new Error('Invalid parking system type');
   }
@@ -936,19 +948,39 @@ const requestCarRelease = async (userId, palletId) => {
     EstimatedTime: estimatedTime
   });
 
-  // Step 5.1: Calculate total estimated time including waiting requests
-  // Find all non-completed requests for the same project and parking system created before this request
+  // Step 5.1: Waiting requests ahead — Tower uses avg target floor × count
   const waitingRequests = await Request.findAll({
     where: {
       ProjectId: pallet.ProjectId,
       ParkingSystemId: pallet.ParkingSystemId,
-      Status: { [Op.ne]: 'Completed' },
-      CreatedAt: { [Op.lt]: request.CreatedAt } // Created before this request
+      Status: { [Op.in]: ['Pending', 'Queued', 'Accepted'] },
+      CreatedAt: { [Op.lt]: request.CreatedAt },
+      Id: { [Op.ne]: request.Id }
     },
-    attributes: ['EstimatedTime']
+    include: [
+      {
+        model: PalletAllotment,
+        as: 'palletAllotment',
+        attributes: ['Id', 'Level']
+      }
+    ]
   });
-  
-  const totalEstimatedTime = estimatedTime;
+
+  waitingNumber = waitingRequests.length;
+
+  if (pallet.parkingSystem.Type === 'Tower') {
+    const floors = waitingRequests
+      .map((r) => r.palletAllotment?.Level)
+      .filter((level) => level != null && level !== undefined)
+      .map((level) => Number(level));
+    const towerEstimate = calculateCustomerTowerReleaseQueueEstimate(pallet.Level, floors);
+    estimatedTime = towerEstimate.estimatedTime;
+    totalEstimatedTime = towerEstimate.totalEstimatedTime;
+    waitingNumber = towerEstimate.waitingNumber;
+    if (request.EstimatedTime !== estimatedTime) {
+      await request.update({ EstimatedTime: estimatedTime });
+    }
+  }
 
   // Step 6: Reload request with associations
   await request.reload({
@@ -1114,7 +1146,7 @@ const requestCarRelease = async (userId, palletId) => {
       estimatedTimeFormatted: formatEstimatedTimeInMinutes(estimatedTime),
       totalEstimatedTime: totalEstimatedTime,
       totalEstimatedTimeFormatted: formatEstimatedTimeInMinutes(totalEstimatedTime),
-      waitingNumber: waitingRequests.length,
+      waitingNumber: waitingNumber,
       createdAt: request.CreatedAt,
       updatedAt: request.UpdatedAt
     },

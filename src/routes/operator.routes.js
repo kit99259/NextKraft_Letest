@@ -1464,7 +1464,10 @@ router.post('/call-empty-pallet', authorize('operator'), validateCallEmptyPallet
  *     description: |
  *       Single endpoint replacing call-specific-pallet, call-pallet-create-request (by pallet), and call-pallet-by-car-number for the accept/create flow.
  *       Send exactly one of **carNumber** (4 digits, last 4 of plate) or **requestId**.
- *       Optional **currentFloor**: live lift floor from PLC FLOOR_COUNTER mapped as 0/1→0, 2→1, 3→2, ... (used for Tower release ETA).
+ *       Optional **currentFloor**: live lift floor from PLC FLOOR_COUNTER (0=GF, 1=TT, 2→1F, …).
+ *       Optional **palletFloor**: Transporter_Pallet_Floor mapped the same way; 0/1→0 (no pallet on lift).
+ *       Used for Tower release ETA:
+ *       CURRENT → (optional PARKED_PALLET) → TARGET → GROUND.
  *       - **requestId**: Accept a pending/queued release request for this operator scope; if already Accepted, returns the same id.
  *       - **carNumber**: Resolve car by last 4 within project + parking system; if an open request exists it is accepted; otherwise a new request is created and accepted (same as call-pallet-by-car-number).
  *       Response **data** contains only **requestId**. Use it with POST /api/operator/release-parked-car when the car has left the pallet.
@@ -1489,8 +1492,13 @@ router.post('/call-empty-pallet', authorize('operator'), validateCallEmptyPallet
  *               currentFloor:
  *                 type: integer
  *                 minimum: 0
- *                 description: Live lift floor (PLC FLOOR_COUNTER mapped — 0/1→0, 2→1, 3→2)
+ *                 description: Live lift floor from FLOOR_COUNTER (0=GF, 1=TT, 2→1F mapped as 1)
  *                 example: 2
+ *               palletFloor:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: Transporter_Pallet_Floor mapped same way; 0 means no pallet on lift
+ *                 example: 0
  *     responses:
  *       200:
  *         description: Returns only requestId in data
