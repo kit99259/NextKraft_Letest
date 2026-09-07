@@ -1466,6 +1466,7 @@ router.post('/call-empty-pallet', authorize('operator'), validateCallEmptyPallet
  *       Send exactly one of **carNumber** (4 digits, last 4 of plate) or **requestId**.
  *       Optional **currentFloor**: live lift floor from PLC FLOOR_COUNTER (0=GF, 1=TT, 2→1F, …).
  *       Optional **palletFloor**: Transporter_Pallet_Floor mapped the same way; 0/1→0 (no pallet on lift).
+ *       Optional **tt**: target-floor TT register value from Omron FloorMapping (PLC poll).
  *       Used for Tower release ETA:
  *       CURRENT → (optional PARKED_PALLET) → TARGET → GROUND.
  *       - **requestId**: Accept a pending/queued release request for this operator scope; if already Accepted, returns the same id.
@@ -1499,6 +1500,12 @@ router.post('/call-empty-pallet', authorize('operator'), validateCallEmptyPallet
  *                 minimum: 0
  *                 description: Transporter_Pallet_Floor mapped same way; 0 means no pallet on lift
  *                 example: 0
+ *               tt:
+ *                 type: integer
+ *                 description: |
+ *                   Target-floor TT from Omron FloorMapping. Tower ETA additives:
+ *                   11 → +45s; 10 → no side add; pallet on lift (palletFloor>0) → +20s.
+ *                 example: 11
  *     responses:
  *       200:
  *         description: Returns only requestId in data

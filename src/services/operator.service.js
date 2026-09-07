@@ -1738,7 +1738,10 @@ const callEmptyPallet = async (operatorUserId, customerId = null, carType) => {
 };
 
 // Call Specific Pallet Service
-const callSpecificPallet = async (operatorUserId, palletId, requestId, currentFloor = 0, palletFloor = 0) => {
+const callSpecificPallet = async (operatorUserId, palletId, requestId, currentFloor = 0, palletFloor = 0, tt = null) => {
+  if (tt != null && !Number.isNaN(Number(tt))) {
+    console.log('[CALL-SPECIFIC-PALLET] target floor TT', { tt: Number(tt), requestId, palletId });
+  }
   // Step 1: Find operator by userId
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId },
@@ -1822,6 +1825,7 @@ const callSpecificPallet = async (operatorUserId, palletId, requestId, currentFl
       targetFloor: pallet.Level,
       currentFloor,
       palletFloor,
+      tt,
     });
   } else if (parkingSystem.Type === 'Puzzle') {
     // For Puzzle: Calculate based on pallet location
@@ -2441,7 +2445,10 @@ const callPalletAndCreateRequest = async (operatorUserId, palletId) => {
 };
 
 // Call pallet by plate suffix — body `carNumber` is 4 digits; match last 4 of plate within ProjectId + ParkingSystemId only
-const callPalletByCarNumber = async (operatorUserId, carNumber, currentFloor = 0, palletFloor = 0) => {
+const callPalletByCarNumber = async (operatorUserId, carNumber, currentFloor = 0, palletFloor = 0, tt = null) => {
+  if (tt != null && !Number.isNaN(Number(tt))) {
+    console.log('[CALL-PALLET-BY-CAR] target floor TT', { tt: Number(tt), carNumber });
+  }
   // Step 1: Find operator by userId
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId },
@@ -2563,6 +2570,7 @@ const callPalletByCarNumber = async (operatorUserId, carNumber, currentFloor = 0
       targetFloor: parkedPallet.Level,
       currentFloor,
       palletFloor,
+      tt,
     });
   } else if (parkingSystem.Type === 'Puzzle') {
     // For Puzzle: Calculate based on pallet location
@@ -2678,9 +2686,10 @@ const callPalletByCarNumber = async (operatorUserId, carNumber, currentFloor = 0
  * - carNumber: resolve pallet by last 4; if an open request exists (pending/queued), accept it; else create + accept as call-pallet-by-car-number.
  * - currentFloor: live lift floor from PLC FLOOR_COUNTER (building index: 0=GF, 1=TT/1F, …).
  * - palletFloor: Transporter_Pallet_Floor mapped the same way; 0 means no pallet on lift.
+ * - tt: optional target-floor TT register value from Omron FloorMapping (live PLC).
  * Response shape for API is only { requestId } at controller layer (service returns same).
  */
-const carOut = async (operatorUserId, carNumber, requestId, currentFloor = 0, palletFloor = 0) => {
+const carOut = async (operatorUserId, carNumber, requestId, currentFloor = 0, palletFloor = 0, tt = null) => {
   const hasCar = carNumber != null && String(carNumber).trim() !== '';
   const hasReq = requestId != null && requestId !== '' && !Number.isNaN(Number(requestId));
   if (hasCar === hasReq) {
@@ -2689,6 +2698,12 @@ const carOut = async (operatorUserId, carNumber, requestId, currentFloor = 0, pa
 
   const liftFloor = Math.max(0, Number(currentFloor) || 0);
   const transporterFloor = Math.max(0, Number(palletFloor) || 0);
+  const targetTt =
+    tt != null && tt !== '' && !Number.isNaN(Number(tt)) ? Number(tt) : null;
+
+  if (targetTt != null) {
+    console.log('[CAR-OUT] target floor TT received', { tt: targetTt, requestId, carNumber });
+  }
 
   const operator = await Operator.findOne({
     where: { UserId: operatorUserId },
@@ -2732,7 +2747,7 @@ const carOut = async (operatorUserId, carNumber, requestId, currentFloor = 0, pa
       throw new Error(`Cannot accept request with status: ${reqRow.Status}. Only Pending and Queued requests can be accepted.`);
     }
 
-    await callSpecificPallet(operatorUserId, reqRow.PalletAllotmentId, rid, liftFloor, transporterFloor);
+    await callSpecificPallet(operatorUserId, reqRow.PalletAllotmentId, rid, liftFloor, transporterFloor, targetTt);
     return { requestId: rid, alreadyAccepted: false };
   }
 
@@ -2774,13 +2789,19 @@ const carOut = async (operatorUserId, carNumber, requestId, currentFloor = 0, pa
       return { requestId: existingRequest.Id, alreadyAccepted: true };
     }
     if (existingRequest.Status === 'Pending' || existingRequest.Status === 'Queued') {
-      await callSpecificPallet(operatorUserId, parkedPallet.Id, existingRequest.Id, liftFloor, transporterFloor);
+      await callSpecificPallet(operatorUserId, parkedPallet.Id, existingRequest.Id, liftFloor, transporterFloor, targetTt);
       return { requestId: existingRequest.Id, alreadyAccepted: false };
     }
     throw new Error(`Cannot accept request with status: ${existingRequest.Status}`);
   }
 
-  const created = await callPalletByCarNumber(operatorUserId, String(carNumber).trim(), liftFloor, transporterFloor);
+  const created = await callPalletByCarNumber(
+    operatorUserId,
+    String(carNumber).trim(),
+    liftFloor,
+    transporterFloor,
+    targetTt
+  );
   return { requestId: created.request.id, alreadyAccepted: false };
 };
 

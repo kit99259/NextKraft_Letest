@@ -14,8 +14,14 @@
  *     + (TraverseTime × TraverseCount)
  *
  * Default with pallet: C1Count=2, C2Count=3, TraverseCount=2
- * No pallet on lift (Transporter 0/1): skip pallet leg; TraverseCount=1, C2Count=2;
+ * No pallet on lift (Transporter 0/1): skip pallet leg; TraverseCount=1;
  *   C1Count=2 at ground (CurrentFloor=0), else C1Count=1
+ *   C2Count=1 when CurrentFloor === TargetFloor, else C2Count=2
+ *
+ * Target-floor TT additives (car-out):
+ *   TT = 11 → + TOWER_TT_SIDE_CONSTANT_SEC (45)
+ *   TT = 10 → no side constant
+ *   Pallet present on lift → + TOWER_TT_PALLET_ON_LIFT_EXTRA_SEC (20)
  */
 
 const TOWER_C1_SEC = 34.73;
@@ -23,6 +29,30 @@ const TOWER_C2_SEC = 12.72;
 const TOWER_SECONDS_PER_FLOOR = 3.24;
 const TOWER_CONSTANT_TRAVERSE_TIME_SEC = 46.47;
 const TOWER_GROUND_FLOOR = 0;
+
+/** Added when target-floor TT register value is 11 (side/turn). TT=10 → 0. */
+const TOWER_TT_SIDE_CONSTANT_SEC = 45;
+/** Extra TT constant when a pallet is already on the lift. */
+const TOWER_TT_PALLET_ON_LIFT_EXTRA_SEC = 20;
+
+/**
+ * TT-based additive seconds for car-out ETA.
+ * @param {number|null|undefined} tt - Target floor TT register (e.g. 10 or 11)
+ * @param {boolean} hasPalletOnLift
+ * @returns {number}
+ */
+const resolveTowerTtAdditiveSeconds = (tt, hasPalletOnLift = false) => {
+  let extra = 0;
+  const ttNum = tt != null && tt !== '' ? Number(tt) : NaN;
+  if (Number.isFinite(ttNum) && ttNum === 11) {
+    extra += TOWER_TT_SIDE_CONSTANT_SEC;
+  }
+  // TT=10 explicitly adds nothing for the side constant
+  if (hasPalletOnLift) {
+    extra += TOWER_TT_PALLET_ON_LIFT_EXTRA_SEC;
+  }
+  return extra;
+};
 
 /** @deprecated Prefer TOWER_C1_SEC; kept for older imports */
 const TOWER_CONSTANT_LIFT_TIME_SEC = TOWER_C1_SEC + TOWER_C2_SEC; // ~47.45 legacy alias
@@ -56,18 +86,23 @@ const isNoPalletOnLift = (palletFloorRawOrMapped) => {
 
 /**
  * Resolve C1/C2/Traverse counts for a release cycle.
- * @param {{ currentFloor?: number, hasPalletOnLift?: boolean }} opts
+ * @param {{ currentFloor?: number, targetFloor?: number, hasPalletOnLift?: boolean }} opts
  */
-const resolveTowerReleaseCounts = ({ currentFloor = 0, hasPalletOnLift = false } = {}) => {
+const resolveTowerReleaseCounts = ({
+  currentFloor = 0,
+  targetFloor = 0,
+  hasPalletOnLift = false,
+} = {}) => {
   if (hasPalletOnLift) {
     // Ground → ParkedPalletFloor → TargetFloor → Ground
     return { c1Count: 2, c2Count: 3, traverseCount: 2 };
   }
   // No pallet: CURRENT → TARGET (+traverse) → GROUND
   const atGround = Number(currentFloor || 0) <= 0;
+  const sameFloor = Number(currentFloor || 0) === Number(targetFloor || 0);
   return {
     c1Count: atGround ? 2 : 1,
-    c2Count: 2,
+    c2Count: sameFloor ? 1 : 2,
     traverseCount: 1,
   };
 };
@@ -79,7 +114,8 @@ const resolveTowerReleaseCounts = ({ currentFloor = 0, hasPalletOnLift = false }
  * @param {number} params.targetFloor - Parked car / pick floor
  * @param {number} [params.currentFloor=0] - Live lift floor (building index)
  * @param {number} [params.palletFloor=0] - Transporter pallet floor (building index); 0/empty = no pallet
- * @param {boolean} [params.hasPalletOnLift] - Override; default inferred from palletFloor > 1 or > 0 after mapping
+ * @param {boolean} [params.hasPalletOnLift] - Override; default inferred from palletFloor > 0
+ * @param {number|null} [params.tt] - Target-floor TT (11 → +45s; 10 → no side add; pallet on lift → +20s)
  * @returns {number} Rounded total seconds
  */
 const calculateTowerReleaseEstimatedTime = (targetFloorOrParams, currentFloorMaybe = 0) => {
@@ -88,6 +124,7 @@ const calculateTowerReleaseEstimatedTime = (targetFloorOrParams, currentFloorMay
   let currentFloor = 0;
   let palletFloor = 0;
   let hasPalletOnLift;
+  let tt = null;
 
   if (
     targetFloorOrParams != null &&
@@ -98,21 +135,20 @@ const calculateTowerReleaseEstimatedTime = (targetFloorOrParams, currentFloorMay
     currentFloor = Number(targetFloorOrParams.currentFloor || 0);
     palletFloor = Number(targetFloorOrParams.palletFloor || 0);
     hasPalletOnLift = targetFloorOrParams.hasPalletOnLift;
+    tt = targetFloorOrParams.tt;
   } else {
     targetFloor = Number(targetFloorOrParams || 0);
     currentFloor = Number(currentFloorMaybe || 0);
     palletFloor = 0;
     hasPalletOnLift = false;
+    tt = null;
   }
 
   if (hasPalletOnLift == null) {
-    // Mapped building floors: pallet on lift when palletFloor >= 1 and we treat
-    // explicit palletFloor>0 with hasPallet from caller; for mapped values,
-    // no-pallet cases send palletFloor=0.
     hasPalletOnLift = palletFloor > 0;
   }
 
-  const counts = resolveTowerReleaseCounts({ currentFloor, hasPalletOnLift });
+  const counts = resolveTowerReleaseCounts({ currentFloor, targetFloor, hasPalletOnLift });
 
   let totalFloorDistance;
   if (hasPalletOnLift) {
@@ -127,11 +163,14 @@ const calculateTowerReleaseEstimatedTime = (targetFloorOrParams, currentFloorMay
     totalFloorDistance = d2 + d3;
   }
 
+  const ttAdditive = resolveTowerTtAdditiveSeconds(tt, hasPalletOnLift);
+
   const total =
     TOWER_C1_SEC * counts.c1Count +
     TOWER_C2_SEC * counts.c2Count +
     TOWER_SECONDS_PER_FLOOR * totalFloorDistance +
-    TOWER_CONSTANT_TRAVERSE_TIME_SEC * counts.traverseCount;
+    TOWER_CONSTANT_TRAVERSE_TIME_SEC * counts.traverseCount +
+    ttAdditive;
 
   return Math.round(total);
 };
@@ -177,9 +216,12 @@ module.exports = {
   TOWER_CONSTANT_TRAVERSE_TIME_SEC,
   TOWER_CONSTANT_LIFT_TIME_SEC,
   TOWER_GROUND_FLOOR,
+  TOWER_TT_SIDE_CONSTANT_SEC,
+  TOWER_TT_PALLET_ON_LIFT_EXTRA_SEC,
   mapPlcFloorToBuildingFloor,
   isNoPalletOnLift,
   resolveTowerReleaseCounts,
+  resolveTowerTtAdditiveSeconds,
   calculateTowerReleaseEstimatedTime,
   calculateCustomerTowerReleaseQueueEstimate,
 };

@@ -150,6 +150,10 @@ const validateCarOut = [
     .optional()
     .isInt({ min: 0 })
     .withMessage('palletFloor must be an integer >= 0'),
+  body('tt')
+    .optional()
+    .isInt()
+    .withMessage('tt must be an integer'),
   body().custom((value) => {
     const hasC = value.carNumber != null && String(value.carNumber).trim() !== '';
     const hasR = value.requestId != null && value.requestId !== '' && !Number.isNaN(parseInt(value.requestId, 10));
