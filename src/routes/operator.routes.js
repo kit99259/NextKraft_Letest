@@ -1504,8 +1504,20 @@ router.post('/call-empty-pallet', authorize('operator'), validateCallEmptyPallet
  *                 type: integer
  *                 description: |
  *                   Target-floor TT from Omron FloorMapping. Tower ETA additives:
- *                   11 → +45s; 10 → no side add; pallet on lift (palletFloor>0) → +20s.
+ *                   11 → +45s side; 10 → no side add.
  *                 example: 11
+ *               w310:
+ *                 type: integer
+ *                 enum: [0, 1]
+ *                 description: |
+ *                   W3.10 TT CC Stop. Extra TT (+45s) only when pallet on lift
+ *                   AND w310=0 AND w313=1.
+ *                 example: 0
+ *               w313:
+ *                 type: integer
+ *                 enum: [0, 1]
+ *                 description: W3.13 CC Wise Stop. With pallet on lift and w310=0, w313=1 adds Extra TT.
+ *                 example: 1
  *     responses:
  *       200:
  *         description: Returns only requestId in data

@@ -312,7 +312,7 @@ const releaseParkedCar = async (req, res) => {
 const carOut = async (req, res) => {
   try {
     const operatorUserId = req.user.id;
-    const { carNumber, requestId, currentFloor, palletFloor, tt } = req.body;
+    const { carNumber, requestId, currentFloor, palletFloor, tt, w310, w313 } = req.body;
 
     const parsedCurrentFloor =
       currentFloor != null && currentFloor !== '' && !Number.isNaN(parseInt(currentFloor, 10))
@@ -326,6 +326,14 @@ const carOut = async (req, res) => {
       tt != null && tt !== '' && !Number.isNaN(parseInt(tt, 10))
         ? parseInt(tt, 10)
         : null;
+    const parsedW310 =
+      w310 != null && w310 !== '' && !Number.isNaN(parseInt(w310, 10))
+        ? (parseInt(w310, 10) !== 0 ? 1 : 0)
+        : null;
+    const parsedW313 =
+      w313 != null && w313 !== '' && !Number.isNaN(parseInt(w313, 10))
+        ? (parseInt(w313, 10) !== 0 ? 1 : 0)
+        : null;
 
     const result = await operatorService.carOut(
       operatorUserId,
@@ -333,7 +341,9 @@ const carOut = async (req, res) => {
       requestId != null && requestId !== '' ? parseInt(requestId, 10) : null,
       parsedCurrentFloor,
       parsedPalletFloor,
-      parsedTt
+      parsedTt,
+      parsedW310,
+      parsedW313
     );
 
     const { requestId: outRequestId, alreadyAccepted } = result;

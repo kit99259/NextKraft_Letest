@@ -154,6 +154,14 @@ const validateCarOut = [
     .optional()
     .isInt()
     .withMessage('tt must be an integer'),
+  body('w310')
+    .optional()
+    .isInt({ min: 0, max: 1 })
+    .withMessage('w310 must be 0 or 1'),
+  body('w313')
+    .optional()
+    .isInt({ min: 0, max: 1 })
+    .withMessage('w313 must be 0 or 1'),
   body().custom((value) => {
     const hasC = value.carNumber != null && String(value.carNumber).trim() !== '';
     const hasR = value.requestId != null && value.requestId !== '' && !Number.isNaN(parseInt(value.requestId, 10));

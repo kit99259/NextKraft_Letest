@@ -21,7 +21,10 @@
  * Target-floor TT additives (car-out):
  *   TT = 11 → + TOWER_TT_SIDE_CONSTANT_SEC (45)
  *   TT = 10 → no side constant
- *   Pallet present on lift → + TOWER_TT_PALLET_ON_LIFT_EXTRA_SEC (20)
+ *   Extra TT:
+ *     Requires pallet on lift first
+ *     Then only if W3.10 = 0 and W3.13 = 1 → + TOWER_TT_EXTRA_SEC (45)
+ *     Otherwise no Extra TT
  */
 
 const TOWER_C1_SEC = 34.73;
@@ -32,25 +35,49 @@ const TOWER_GROUND_FLOOR = 0;
 
 /** Added when target-floor TT register value is 11 (side/turn). TT=10 → 0. */
 const TOWER_TT_SIDE_CONSTANT_SEC = 45;
-/** Extra TT constant when a pallet is already on the lift. */
-const TOWER_TT_PALLET_ON_LIFT_EXTRA_SEC = 20;
+/** Extra TT when pallet on lift AND W3.10=0 AND W3.13=1. */
+const TOWER_TT_EXTRA_SEC = 45;
+
+/** @deprecated Use TOWER_TT_EXTRA_SEC */
+const TOWER_TT_PALLET_ON_LIFT_EXTRA_SEC = TOWER_TT_EXTRA_SEC;
 
 /**
  * TT-based additive seconds for car-out ETA.
  * @param {number|null|undefined} tt - Target floor TT register (e.g. 10 or 11)
- * @param {boolean} hasPalletOnLift
+ * @param {object} [opts]
+ * @param {number|null|undefined} [opts.w310] - W3.10 TT CC Stop (0/1)
+ * @param {number|null|undefined} [opts.w313] - W3.13 CC Wise Stop (0/1)
+ * @param {boolean} [opts.hasPalletOnLift] - must be true before W3.10/W3.13 Extra TT applies
  * @returns {number}
  */
-const resolveTowerTtAdditiveSeconds = (tt, hasPalletOnLift = false) => {
+const resolveTowerTtAdditiveSeconds = (tt, opts = {}) => {
+  // Backward-compatible: (tt, hasPalletOnLiftBoolean)
+  let w310 = null;
+  let w313 = null;
+  let hasPalletOnLift = false;
+  if (typeof opts === 'boolean') {
+    hasPalletOnLift = opts;
+  } else if (opts && typeof opts === 'object') {
+    w310 = opts.w310;
+    w313 = opts.w313;
+    hasPalletOnLift = !!opts.hasPalletOnLift;
+  }
+
   let extra = 0;
   const ttNum = tt != null && tt !== '' ? Number(tt) : NaN;
   if (Number.isFinite(ttNum) && ttNum === 11) {
     extra += TOWER_TT_SIDE_CONSTANT_SEC;
   }
-  // TT=10 explicitly adds nothing for the side constant
+
+  // Extra TT: pallet on lift first, then only W3.10=0 and W3.13=1
   if (hasPalletOnLift) {
-    extra += TOWER_TT_PALLET_ON_LIFT_EXTRA_SEC;
+    const bit310 = Number(w310);
+    const bit313 = Number(w313);
+    if (bit310 === 0 && bit313 === 1) {
+      extra += TOWER_TT_EXTRA_SEC;
+    }
   }
+
   return extra;
 };
 
@@ -115,7 +142,9 @@ const resolveTowerReleaseCounts = ({
  * @param {number} [params.currentFloor=0] - Live lift floor (building index)
  * @param {number} [params.palletFloor=0] - Transporter pallet floor (building index); 0/empty = no pallet
  * @param {boolean} [params.hasPalletOnLift] - Override; default inferred from palletFloor > 0
- * @param {number|null} [params.tt] - Target-floor TT (11 → +45s; 10 → no side add; pallet on lift → +20s)
+ * @param {number|null} [params.tt] - Target-floor TT (11 → +45s side; 10 → no side add)
+ * @param {number|null} [params.w310] - W3.10 TT CC Stop
+ * @param {number|null} [params.w313] - W3.13 CC Wise Stop
  * @returns {number} Rounded total seconds
  */
 const calculateTowerReleaseEstimatedTime = (targetFloorOrParams, currentFloorMaybe = 0) => {
@@ -125,6 +154,8 @@ const calculateTowerReleaseEstimatedTime = (targetFloorOrParams, currentFloorMay
   let palletFloor = 0;
   let hasPalletOnLift;
   let tt = null;
+  let w310 = null;
+  let w313 = null;
 
   if (
     targetFloorOrParams != null &&
@@ -136,12 +167,16 @@ const calculateTowerReleaseEstimatedTime = (targetFloorOrParams, currentFloorMay
     palletFloor = Number(targetFloorOrParams.palletFloor || 0);
     hasPalletOnLift = targetFloorOrParams.hasPalletOnLift;
     tt = targetFloorOrParams.tt;
+    w310 = targetFloorOrParams.w310;
+    w313 = targetFloorOrParams.w313;
   } else {
     targetFloor = Number(targetFloorOrParams || 0);
     currentFloor = Number(currentFloorMaybe || 0);
     palletFloor = 0;
     hasPalletOnLift = false;
     tt = null;
+    w310 = null;
+    w313 = null;
   }
 
   if (hasPalletOnLift == null) {
@@ -163,7 +198,7 @@ const calculateTowerReleaseEstimatedTime = (targetFloorOrParams, currentFloorMay
     totalFloorDistance = d2 + d3;
   }
 
-  const ttAdditive = resolveTowerTtAdditiveSeconds(tt, hasPalletOnLift);
+  const ttAdditive = resolveTowerTtAdditiveSeconds(tt, { w310, w313, hasPalletOnLift });
 
   const total =
     TOWER_C1_SEC * counts.c1Count +
@@ -217,6 +252,7 @@ module.exports = {
   TOWER_CONSTANT_LIFT_TIME_SEC,
   TOWER_GROUND_FLOOR,
   TOWER_TT_SIDE_CONSTANT_SEC,
+  TOWER_TT_EXTRA_SEC,
   TOWER_TT_PALLET_ON_LIFT_EXTRA_SEC,
   mapPlcFloorToBuildingFloor,
   isNoPalletOnLift,
