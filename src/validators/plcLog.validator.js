@@ -18,6 +18,10 @@ const validateBulkAddLogs = [
     .withMessage('logs must be a non-empty array')
     .custom((logs) => {
       logs.forEach((item, i) => {
+        const syncUuid = item.syncUuid ?? item.SyncUuid;
+        if (syncUuid === undefined || syncUuid === null || String(syncUuid).trim() === '') {
+          throw new Error(`logs[${i}]: syncUuid is required`);
+        }
         const plc = item.plclogId ?? item.id;
         if (plc === undefined || plc === null || plc === '') {
           throw new Error(`logs[${i}]: each log must have id (PLC log id) or plclogId`);
@@ -25,6 +29,14 @@ const validateBulkAddLogs = [
         const n = parseInt(plc, 10);
         if (!Number.isFinite(n) || n < 1) {
           throw new Error(`logs[${i}]: PLC log id must be a positive integer`);
+        }
+        const projectId = parseInt(item.projectId ?? item.ProjectId, 10);
+        if (!Number.isFinite(projectId) || projectId < 1) {
+          throw new Error(`logs[${i}]: projectId is required and must be a positive integer`);
+        }
+        const parkingSystemId = parseInt(item.parkingSystemId ?? item.ParkingSystemId, 10);
+        if (!Number.isFinite(parkingSystemId) || parkingSystemId < 1) {
+          throw new Error(`logs[${i}]: parkingSystemId is required and must be a positive integer`);
         }
         if (item.key === undefined || item.key === null || String(item.key).trim() === '') {
           throw new Error(`logs[${i}]: key is required`);

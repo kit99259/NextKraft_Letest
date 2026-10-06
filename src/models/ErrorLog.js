@@ -7,10 +7,22 @@ const ErrorLog = sequelize.define('ErrorLog', {
     primaryKey: true,
     autoIncrement: true
   },
-  PlcLogId: {
-    type: DataTypes.INTEGER,
+  SyncUuid: {
+    type: DataTypes.STRING(64),
     allowNull: false,
     unique: true
+  },
+  PlcLogId: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  ProjectId: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  ParkingSystemId: {
+    type: DataTypes.INTEGER,
+    allowNull: true
   },
   Type: {
     type: DataTypes.STRING(255),
@@ -44,7 +56,12 @@ const ErrorLog = sequelize.define('ErrorLog', {
   tableName: 'error_logs',
   timestamps: true,
   createdAt: 'CreatedAt',
-  updatedAt: 'UpdatedAt'
+  updatedAt: 'UpdatedAt',
+  indexes: [
+    { fields: ['ParkingSystemId', 'PlcLogId'], name: 'idx_error_logs_ps_plclogid' },
+    { fields: ['ProjectId'], name: 'idx_error_logs_projectid' },
+    { fields: ['ParkingSystemId'], name: 'idx_error_logs_parkingsystemid' }
+  ]
 });
 
 module.exports = ErrorLog;

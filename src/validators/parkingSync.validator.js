@@ -20,6 +20,13 @@ const validateParkingSync = [
     .optional()
     .isInt({ min: 1 })
     .withMessage('carAllotHistory id must be a positive integer'),
+  body('carAllotHistory.*.syncUuid')
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('syncUuid must be a string')
+    .bail()
+    .isLength({ min: 1, max: 64 })
+    .withMessage('syncUuid must be 1-64 characters'),
   body('carAllotHistory.*.floorMappingId')
     .notEmpty()
     .withMessage('floorMappingId is required for each history row')

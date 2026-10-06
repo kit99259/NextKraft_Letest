@@ -214,17 +214,24 @@ const calculateTowerReleaseEstimatedTime = (targetFloorOrParams, currentFloorMay
  * Customer pending-release ETA: ground, no pallet on lift, then queue wait
  * using average target floor of requests ahead × count ahead.
  *
+ * Flat additives (customer create-time only):
+ *   thisCarTime += 45
+ *   total += 45 × waitingNumber
+ *
  * @param {number} targetFloor - This request's parked car floor
  * @param {number[]} waitingTargetFloors - Floors of release requests ahead
  * @returns {{ estimatedTime: number, totalEstimatedTime: number, waitingNumber: number }}
  */
 const calculateCustomerTowerReleaseQueueEstimate = (targetFloor, waitingTargetFloors = []) => {
-  const estimatedTime = calculateTowerReleaseEstimatedTime({
+  const CUSTOMER_RELEASE_FLAT_ADD_SEC = 45;
+
+  const baseEstimatedTime = calculateTowerReleaseEstimatedTime({
     targetFloor,
     currentFloor: 0,
     palletFloor: 0,
     hasPalletOnLift: false,
   });
+  const estimatedTime = Math.round(baseEstimatedTime + CUSTOMER_RELEASE_FLAT_ADD_SEC);
 
   const waitingNumber = Array.isArray(waitingTargetFloors) ? waitingTargetFloors.length : 0;
   if (waitingNumber === 0) {
@@ -240,7 +247,9 @@ const calculateCustomerTowerReleaseQueueEstimate = (targetFloor, waitingTargetFl
     hasPalletOnLift: false,
   });
 
-  const totalEstimatedTime = Math.round(estimatedTime + avgJobTime * waitingNumber);
+  const totalEstimatedTime = Math.round(
+    estimatedTime + avgJobTime * waitingNumber + CUSTOMER_RELEASE_FLAT_ADD_SEC * waitingNumber
+  );
   return { estimatedTime, totalEstimatedTime, waitingNumber };
 };
 

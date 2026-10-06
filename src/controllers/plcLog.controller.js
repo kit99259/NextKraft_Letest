@@ -49,7 +49,7 @@ const getErrorLogs = async (req, res) => {
 
 const getLastErrorLogPlcLogId = async (req, res) => {
   try {
-    const data = await plcLogService.getLastPlcLogId(ErrorLog);
+    const data = await plcLogService.getLastPlcLogId(ErrorLog, req.query);
     return successResponse(res, data, 'Last error log PLC id retrieved successfully');
   } catch (error) {
     console.error('getLastErrorLogPlcLogId:', error);
@@ -89,7 +89,7 @@ const getSystemLogs = async (req, res) => {
 
 const getLastSystemLogPlcLogId = async (req, res) => {
   try {
-    const data = await plcLogService.getLastPlcLogId(SystemLog);
+    const data = await plcLogService.getLastPlcLogId(SystemLog, req.query);
     return successResponse(res, data, 'Last system log PLC id retrieved successfully');
   } catch (error) {
     console.error('getLastSystemLogPlcLogId:', error);

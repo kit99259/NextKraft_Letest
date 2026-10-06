@@ -290,16 +290,33 @@ const processParkingSync = async (operatorUserId, carAllotHistory = []) => {
   const applied = [];
   const skipped = [];
   const failed = [];
+  const ackCarAllotHistory = [];
+
+  const pushAck = (syncUuid, isParkingSync, isRetrivalSync, historyId = null) => {
+    if (!syncUuid) return;
+    ackCarAllotHistory.push({
+      syncUuid,
+      historyId,
+      isParkingSync: !!isParkingSync,
+      isRetrivalSync: !!isRetrivalSync
+    });
+  };
 
   for (const row of sorted) {
     const historyId = row.id != null ? row.id : null;
+    const syncUuid =
+      row.syncUuid != null && String(row.syncUuid).trim() !== ''
+        ? String(row.syncUuid).trim()
+        : null;
     const rowFloorMapping = row.floorMapping || {};
     const rowKey =
-      historyId != null && historyId !== ''
-        ? `id:${historyId}`
-        : `c:${rowFloorMapping.id}|${row.parkingTime}|${normalizeCarNumber(row.carNumber)}|${row.retriveTime || ''}`;
+      syncUuid != null
+        ? `uuid:${syncUuid}`
+        : historyId != null && historyId !== ''
+          ? `id:${historyId}`
+          : `c:${rowFloorMapping.id}|${row.parkingTime}|${normalizeCarNumber(row.carNumber)}|${row.retriveTime || ''}`;
     if (seenRowKeys.has(rowKey)) {
-      skipped.push({ historyId, reason: 'Duplicate row in same payload' });
+      skipped.push({ historyId, syncUuid, reason: 'Duplicate row in same payload' });
       continue;
     }
     seenRowKeys.add(rowKey);
@@ -335,19 +352,25 @@ const processParkingSync = async (operatorUserId, carAllotHistory = []) => {
       const parkingAt = asDate(row.parkingTime, getISTTime());
       const rowUpdatedAt = asDate(row.updatedAt, parkingAt);
       const retrieveAt = asDate(row.retriveTime, null);
-      const isParkingSynced = row.isParkingSync === true;
-      const isRetrivalSynced = row.isRetrivalSync === true;
 
-      if (!isParkingSynced && !isRetrivalSynced) {
+      // Omron flags are ACK-only: false = not yet ACKed / needs apply; true = already ACKed.
+      const parkingAcked = row.isParkingSync === true;
+      const retrievalAcked = row.isRetrivalSync === true;
+      const needsParking = !parkingAcked;
+      const needsRetrieval = !!retrieveAt && !retrievalAcked;
+
+      if (!needsParking && !needsRetrieval) {
         await t.commit();
-        skipped.push({ historyId, reason: 'Both parking and retrival sync flags are false' });
+        skipped.push({ historyId, syncUuid, reason: 'Nothing pending (parking and retrieval already ACKed)' });
+        pushAck(syncUuid, true, !!retrieveAt && retrievalAcked, historyId);
         continue;
       }
 
       if (!retrieveAt) {
-        if (isParkingSynced) {
+        if (!needsParking) {
           await t.commit();
-          skipped.push({ historyId, reason: 'Parking already synced and retriveTime is null' });
+          skipped.push({ historyId, syncUuid, reason: 'Parking already ACKed and retriveTime is null' });
+          pushAck(syncUuid, true, false, historyId);
           continue;
         }
         const existingCompleted = await ParkingRequest.findOne({
@@ -369,7 +392,8 @@ const processParkingSync = async (operatorUserId, carAllotHistory = []) => {
 
         if (alreadyApplied) {
           await t.commit();
-          skipped.push({ historyId, reason: 'Already synced state for active parking record' });
+          skipped.push({ historyId, syncUuid, reason: 'Already synced state for active parking record' });
+          pushAck(syncUuid, true, false, historyId);
           continue;
         }
 
@@ -388,25 +412,29 @@ const processParkingSync = async (operatorUserId, carAllotHistory = []) => {
         await t.commit();
         applied.push({
           historyId,
+          syncUuid,
           action: 'parked',
+          isParkingSync: true,
+          isRetrivalSync: false,
           pallet: toResponsePallet(pallet),
           carId: car.Id,
           userId: customer.UserId
         });
+        pushAck(syncUuid, true, false, historyId);
         continue;
       }
 
-      if (isRetrivalSynced) {
+      if (!needsRetrieval) {
         await t.commit();
-        skipped.push({ historyId, reason: 'Retrival already synced' });
+        skipped.push({ historyId, syncUuid, reason: 'Retrival already ACKed' });
+        pushAck(syncUuid, true, true, historyId);
         continue;
       }
 
       let targetPallet = pallet;
 
-      // Recovery path: parking was already synced, retrieval not synced, and car may still
-      // be parked on server in another pallet row for this parking system.
-      if (isParkingSynced && retrieveAt) {
+      // Recovery path: parking already ACKed, retrieval pending; car may be on another pallet.
+      if (parkingAcked && retrieveAt) {
         const parkedPallet = await PalletAllotment.findOne({
           where: {
             ParkingSystemId: operator.ParkingSystemId,
@@ -423,6 +451,18 @@ const processParkingSync = async (operatorUserId, carAllotHistory = []) => {
       } else {
         // Ensure parking state exists before retrieve completion.
         await ensureParkingRequestCompleted(operator, car, parkingAt, rowUpdatedAt, t);
+        if (needsParking && targetPallet.Status !== 'Assigned') {
+          await targetPallet.update(
+            {
+              UserId: customer.UserId,
+              CarId: car.Id,
+              CarType: car.CarType || (CAR_TYPE_VALUES.includes(floorMapping.carType) ? floorMapping.carType : null),
+              Status: 'Assigned',
+              UpdatedAt: rowUpdatedAt
+            },
+            { transaction: t }
+          );
+        }
       }
 
       const dedupeQueue = await RequestQueue.findOne({
@@ -438,7 +478,8 @@ const processParkingSync = async (operatorUserId, carAllotHistory = []) => {
 
       if (targetPallet.Status === 'Released' && targetPallet.CarId === null && dedupeQueue) {
         await t.commit();
-        skipped.push({ historyId, reason: 'Already synced state for retrieved record' });
+        skipped.push({ historyId, syncUuid, reason: 'Already synced state for retrieved record' });
+        pushAck(syncUuid, true, true, historyId);
         continue;
       }
 
@@ -511,15 +552,20 @@ const processParkingSync = async (operatorUserId, carAllotHistory = []) => {
       await t.commit();
       applied.push({
         historyId,
+        syncUuid,
         action: 'retrieved',
+        isParkingSync: true,
+        isRetrivalSync: true,
         pallet: toResponsePallet(targetPallet),
         carId: car.Id,
         userId: customer.UserId
       });
+      pushAck(syncUuid, true, true, historyId);
     } catch (error) {
       await t.rollback();
       failed.push({
         historyId,
+        syncUuid,
         reason: error.message || 'Failed to process sync row'
       });
     }
@@ -529,11 +575,15 @@ const processParkingSync = async (operatorUserId, carAllotHistory = []) => {
     applied,
     skipped,
     failed,
+    ack: {
+      carAllotHistory: ackCarAllotHistory
+    },
     totals: {
       received: carAllotHistory.length,
       applied: applied.length,
       skipped: skipped.length,
-      failed: failed.length
+      failed: failed.length,
+      acked: ackCarAllotHistory.length
     }
   };
 };
